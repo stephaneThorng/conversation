@@ -4,5 +4,5 @@ import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 @NullMarked
-public record SendMessageRequest (@Nullable String sessionId, String message) {}
+public record SendMessageRequest (@Nullable String sessionId, String establishmentId, String message) {}
 
