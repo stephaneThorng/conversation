@@ -3,6 +3,7 @@ package dev.stephyu.config.web;
 import dev.stephyu.config.exception.GlobalExceptionHandlers;
 import io.javalin.Javalin;
 import java.util.Collection;
+import java.nio.charset.StandardCharsets;
 
 import io.javalin.config.RoutesConfig;
 import org.jspecify.annotations.NullMarked;
@@ -39,6 +40,10 @@ public final class JavalinFactory {
                 )
             );
 
+            config.routes.before(ctx -> {
+                ctx.req().setCharacterEncoding(StandardCharsets.UTF_8.name());
+                ctx.res().setCharacterEncoding(StandardCharsets.UTF_8.name());
+            });
             globalExceptionHandlers.register(config.routes);
             registerRoutes(config.routes, controllers);
         });

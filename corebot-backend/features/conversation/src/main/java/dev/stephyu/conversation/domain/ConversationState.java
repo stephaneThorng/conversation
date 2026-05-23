@@ -1,6 +1,9 @@
 package dev.stephyu.conversation.domain;
 
 import dev.stephyu.conversation.domain.workflow.Workflow;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.jspecify.annotations.NullMarked;
@@ -9,16 +12,20 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public record ConversationState(
         EstablishmentId establishmentId,
+        @Nullable String language,
         @Nullable Workflow workflow,
-        @Nullable String lastAssistantReply
+        List<ConversationTurn> recentTurns
 ) {
+
+    private static final int MAX_RECENT_TURNS = 10;
 
     public ConversationState {
         Objects.requireNonNull(establishmentId, "establishmentId must not be null");
+        recentTurns = boundedTurns(recentTurns);
     }
 
     public ConversationState(EstablishmentId establishmentId, @Nullable Workflow workflow) {
-        this(establishmentId, workflow, null);
+        this(establishmentId, null, workflow, List.of());
     }
 
     public Optional<Workflow> activeWorkflow() {
@@ -30,14 +37,47 @@ public record ConversationState(
     }
 
     public ConversationState withWorkflow(Workflow nextWorkflow) {
-        return new ConversationState(establishmentId, nextWorkflow, lastAssistantReply);
+        return new ConversationState(establishmentId, language, nextWorkflow, recentTurns);
     }
 
     public ConversationState withoutWorkflow() {
-        return new ConversationState(establishmentId, null, lastAssistantReply);
+        return new ConversationState(establishmentId, language, null, recentTurns);
     }
 
     public ConversationState withLastAssistantReply(String reply) {
-        return new ConversationState(establishmentId, workflow, reply);
+        return withAppendedTurn(new ConversationTurn(ConversationTurn.Role.ASSISTANT, reply));
+    }
+
+    public ConversationState withLanguage(String nextLanguage) {
+        return new ConversationState(establishmentId, nextLanguage, workflow, recentTurns);
+    }
+
+    public ConversationState withUserMessage(String message) {
+        return withAppendedTurn(new ConversationTurn(ConversationTurn.Role.USER, message));
+    }
+
+    public Optional<String> lastAssistantReply() {
+        for (int index = recentTurns.size() - 1; index >= 0; index--) {
+            ConversationTurn turn = recentTurns.get(index);
+            if (turn.role() == ConversationTurn.Role.ASSISTANT) {
+                return Optional.of(turn.content());
+            }
+        }
+        return Optional.empty();
+    }
+
+    private ConversationState withAppendedTurn(ConversationTurn turn) {
+        List<ConversationTurn> nextTurns = new ArrayList<>(recentTurns);
+        nextTurns.add(turn);
+        return new ConversationState(establishmentId, language, workflow, nextTurns);
+    }
+
+    private static List<ConversationTurn> boundedTurns(List<ConversationTurn> turns) {
+        Objects.requireNonNull(turns, "recentTurns must not be null");
+        if (turns.size() <= MAX_RECENT_TURNS) {
+            return List.copyOf(turns);
+        }
+        int fromIndex = turns.size() - MAX_RECENT_TURNS;
+        return Collections.unmodifiableList(new ArrayList<>(turns.subList(fromIndex, turns.size())));
     }
 }

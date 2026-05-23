@@ -8,5 +8,9 @@ public enum WorkflowType {
     GREETING,
     THANKS,
     GOODBYE,
-    UNKNOWN
+    UNKNOWN;
+
+    public String messageKeyPrefix() {
+        return name().toLowerCase(java.util.Locale.ROOT);
+    }
 }

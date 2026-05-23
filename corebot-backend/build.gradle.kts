@@ -14,7 +14,7 @@ plugins {
 group = "dev.stephyu"
 version = "1.0-SNAPSHOT"
 
-val javaVersion = 21
+val javaVersion = 25
 val junitBomVersion = "6.0.0"
 val jspecifyVersion = "1.0.0"
 val errorProneVersion = "2.49.0"
@@ -25,6 +25,7 @@ subprojects {
     version = rootProject.version
 
     repositories {
+        mavenLocal()
         mavenCentral()
     }
 

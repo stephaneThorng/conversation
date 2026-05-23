@@ -3,7 +3,6 @@ package dev.stephyu.conversation.application.usecase;
 import dev.stephyu.conversation.domain.EstablishmentId;
 import dev.stephyu.conversation.domain.SessionId;
 import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public interface HandleConversationUseCase {
