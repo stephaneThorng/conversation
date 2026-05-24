@@ -17,8 +17,11 @@ import dev.stephyu.conversation.domain.SessionId;
 import dev.stephyu.conversation.domain.workflow.WorkflowType;
 import java.time.LocalDate;
 import java.util.List;
+
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class LlmConversationAnalyzerAdapterTest {
 
     @Test

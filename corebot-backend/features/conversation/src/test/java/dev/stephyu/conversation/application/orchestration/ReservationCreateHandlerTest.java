@@ -13,8 +13,11 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
+@NullMarked
 class ReservationCreateHandlerTest {
 
     @Test

@@ -8,6 +8,8 @@ import dev.stephyu.conversation.domain.workflow.Workflow;
 import dev.stephyu.conversation.domain.workflow.WorkflowType;
 import java.util.List;
 import java.util.Map;
+
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 class IntentHandlerRegistryTest {
@@ -43,7 +45,7 @@ class IntentHandlerRegistryTest {
         }
 
         @Override
-        public WorkflowPostProcessResult onConfirmed(HandlerInput input, Workflow workflow) {
+        public WorkflowPostProcessResult onConfirmed(@NonNull HandlerInput input, Workflow workflow) {
             return WorkflowPostProcessResult.success("workflow.success", Map.of());
         }
     }
