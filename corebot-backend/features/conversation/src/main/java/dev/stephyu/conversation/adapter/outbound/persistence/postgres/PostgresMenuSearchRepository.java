@@ -12,7 +12,6 @@ import dev.stephyu.conversation.domain.menu.MenuItemSearchQuery;
 import dev.stephyu.conversation.domain.menu.MenuItemSearchResult;
 import dev.stephyu.conversation.domain.menu.MenuSearchQuery;
 import dev.stephyu.conversation.domain.menu.MenuSearchResult;
-import dev.stephyu.conversation.domain.menu.PriceCriterion;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,7 +19,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Field;
 import org.jooq.JSON;
@@ -51,7 +49,8 @@ public final class PostgresMenuSearchRepository implements SearchMenuRepositoryP
                         RESTAURANT_MENU.PRICE_CENTS,
                         RESTAURANT_MENU.CURRENCY)
                 .from(RESTAURANT_MENU)
-                .where(buildMenuConditions(query))
+                .where(RESTAURANT_MENU.ESTABLISHMENT_ID.eq(query.establishmentId())
+                        .and(RESTAURANT_MENU.ACTIVE.isTrue()))
                 .orderBy(RESTAURANT_MENU.SORT_ORDER.asc(), RESTAURANT_MENU.CODE.asc())
                 .fetch();
 
@@ -93,7 +92,8 @@ public final class PostgresMenuSearchRepository implements SearchMenuRepositoryP
                         RESTAURANT_MENU_ITEM.ALLERGEN_CODES,
                         RESTAURANT_MENU_ITEM.DIETARY_RESTRICTION_CODES)
                 .from(RESTAURANT_MENU_ITEM)
-                .where(buildMenuItemConditions(query))
+                .where(RESTAURANT_MENU_ITEM.ESTABLISHMENT_ID.eq(query.establishmentId())
+                        .and(RESTAURANT_MENU_ITEM.ACTIVE.isTrue()))
                 .orderBy(RESTAURANT_MENU_ITEM.CODE.asc())
                 .fetch(record -> new MenuItemSearchResult(
                         record.get(RESTAURANT_MENU_ITEM.ID),
@@ -188,87 +188,6 @@ public final class PostgresMenuSearchRepository implements SearchMenuRepositoryP
         return copyNestedLists(itemsBySectionId);
     }
 
-    private Condition buildMenuConditions(MenuSearchQuery query) {
-        Condition condition = RESTAURANT_MENU.ESTABLISHMENT_ID.eq(query.establishmentId())
-                .and(RESTAURANT_MENU.ACTIVE.isTrue());
-        if (query.menuNameFilter().isPresent()) {
-            condition = condition.and(jsonTextContains(
-                    RESTAURANT_MENU.NAME_TRANSLATIONS,
-                    query.menuNameFilter().orElseThrow()));
-        }
-        if (query.ingredientFilter().isPresent()) {
-            condition = condition.and(menuContainsIngredient(query.ingredientFilter().orElseThrow()));
-        }
-        condition = withPriceCriterion(condition, RESTAURANT_MENU.PRICE_CENTS, query.priceCriterion());
-        return condition;
-    }
-
-    private Condition buildMenuItemConditions(MenuItemSearchQuery query) {
-        Condition condition = RESTAURANT_MENU_ITEM.ESTABLISHMENT_ID.eq(query.establishmentId())
-                .and(RESTAURANT_MENU_ITEM.ACTIVE.isTrue());
-        if (query.itemNameFilter().isPresent()) {
-            condition = condition.and(jsonTextContains(
-                    RESTAURANT_MENU_ITEM.NAME_TRANSLATIONS,
-                    query.itemNameFilter().orElseThrow()));
-        }
-        if (query.ingredientFilter().isPresent()) {
-            condition = condition.and(jsonTextContains(
-                    RESTAURANT_MENU_ITEM.INGREDIENT_NOTE_TRANSLATIONS,
-                    query.ingredientFilter().orElseThrow()));
-        }
-        if (query.allergenCodeFilter().isPresent()) {
-            condition = condition.and(arrayContains(
-                    RESTAURANT_MENU_ITEM.ALLERGEN_CODES,
-                    query.allergenCodeFilter().orElseThrow()));
-        }
-        if (query.dietaryRestrictionCodeFilter().isPresent()) {
-            condition = condition.and(arrayContains(
-                    RESTAURANT_MENU_ITEM.DIETARY_RESTRICTION_CODES,
-                    query.dietaryRestrictionCodeFilter().orElseThrow()));
-        }
-        condition = withPriceCriterion(condition, RESTAURANT_MENU_ITEM.PRICE_CENTS, query.priceCriterion());
-        return condition;
-    }
-
-    private Condition menuContainsIngredient(String ingredient) {
-        return DSL.exists(DSL.selectOne()
-                .from(RESTAURANT_MENU_SECTION)
-                .join(RESTAURANT_MENU_SECTION_ITEM_MAP)
-                .on(RESTAURANT_MENU_SECTION_ITEM_MAP.MENU_SECTION_ID.eq(RESTAURANT_MENU_SECTION.ID))
-                .join(RESTAURANT_MENU_ITEM)
-                .on(RESTAURANT_MENU_ITEM.ID.eq(RESTAURANT_MENU_SECTION_ITEM_MAP.MENU_ITEM_ID))
-                .where(RESTAURANT_MENU_SECTION.MENU_ID.eq(RESTAURANT_MENU.ID))
-                .and(RESTAURANT_MENU_SECTION.ACTIVE.isTrue())
-                .and(RESTAURANT_MENU_ITEM.ACTIVE.isTrue())
-                .and(jsonTextContains(RESTAURANT_MENU_ITEM.INGREDIENT_NOTE_TRANSLATIONS, ingredient)));
-    }
-
-    private static Condition withPriceCriterion(
-            Condition condition,
-            Field<Integer> field,
-            @Nullable PriceCriterion priceCriterion) {
-        if (priceCriterion == null) {
-            return condition;
-        }
-        int minPrice = Optional.ofNullable(priceCriterion.minPriceCents()).orElseThrow();
-        return switch (priceCriterion.comparator()) {
-            case GREATER_THAN -> condition.and(field.gt(minPrice));
-            case LESSER_THAN -> condition.and(field.lt(minPrice));
-            case EQUAL -> condition.and(field.eq(minPrice));
-            case BETWEEN -> condition.and(field.between(
-                    minPrice,
-                    Optional.ofNullable(priceCriterion.maxPriceCents()).orElseThrow()));
-        };
-    }
-
-    private static Condition jsonTextContains(Field<JSON> field, String value) {
-        String pattern = "%" + value.toLowerCase(java.util.Locale.ROOT) + "%";
-        return DSL.condition("lower(cast({0} as text)) like {1}", field, pattern);
-    }
-
-    private static Condition arrayContains(Field<String[]> field, String value) {
-        return DSL.condition("{0} @> {1}::text[]", field, DSL.val(new String[] { value }));
-    }
 
     private static List<String> arrayValues(@Nullable String[] values) {
         return values == null ? List.of() : List.of(values);

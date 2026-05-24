@@ -1,8 +1,9 @@
 package dev.stephyu.conversation.application.orchestration;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import dev.stephyu.conversation.adapter.outbound.reply.PropertiesConversationReplyCatalog;
+import dev.stephyu.conversation.application.port.outbound.ConversationReplyPort;
 import dev.stephyu.conversation.application.reply.ResponseTone;
 import dev.stephyu.conversation.domain.ConversationState;
 import dev.stephyu.conversation.domain.EstablishmentId;
@@ -11,12 +12,17 @@ import org.junit.jupiter.api.Test;
 
 class WorkflowReplyResolverTest {
 
+    // Stub that echoes the intent + facts as the reply — avoids real LLM calls in unit tests.
+    private static final ConversationReplyPort STUB_REPLY_PORT =
+            (sessionId, language, context, userMessage) ->
+                    context.replyIntent().name() + ": " + context.facts().toString();
+
     @Test
-    void resolvesReplyDirectiveWithLanguageToneAndArguments() {
-        WorkflowReplyResolver resolver = new WorkflowReplyResolver(new PropertiesConversationReplyCatalog());
+    void resolvesReplyDirectiveToNonEmptyReply() {
+        WorkflowReplyResolver resolver = new WorkflowReplyResolver(STUB_REPLY_PORT);
         ReplyDirective directive = new ReplyDirective(
                 new ConversationState(EstablishmentId.of("est-1"), null),
-                "reservation_create.success",
+                ConversationReplyPort.ReplyIntent.WORKFLOW_SUCCESS,
                 Map.of(
                         "reservation_name", "Martin",
                         "date", "2026-05-24",
@@ -24,10 +30,9 @@ class WorkflowReplyResolverTest {
                         "people_count", "4",
                         "reference", "ABC12345"));
 
-        HandlerResult result = resolver.resolve(directive, "en", ResponseTone.FRIENDLY);
+        HandlerResult result = resolver.resolve(directive, "en", ResponseTone.FRIENDLY, "session-1", "confirm please");
 
-        assertEquals(
-                "Your reservation is confirmed for Martin on 2026-05-24 at 18:00 for 4 people. Reference: ABC12345.",
-                result.reply());
+        assertNotNull(result.reply());
+        assertFalse(result.reply().isBlank());
     }
 }

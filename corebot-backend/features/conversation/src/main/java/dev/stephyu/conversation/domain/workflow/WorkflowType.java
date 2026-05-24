@@ -10,8 +10,4 @@ public enum WorkflowType {
     THANKS,
     GOODBYE,
     UNKNOWN;
-
-    public String messageKeyPrefix() {
-        return name().toLowerCase(java.util.Locale.ROOT);
-    }
 }

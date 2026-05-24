@@ -68,7 +68,6 @@ class ReservationCreateHandlerTest {
         WorkflowPostProcessResult result = handler.onConfirmed(TestFixtures.handlerInput(), completeWorkflow());
 
         assertTrue(result.success());
-        assertEquals("reservation_create.success", result.messageKey());
         assertEquals("REF001", result.arguments().get("reference"));
         assertEquals("Martin", capturedRequest.get().reservationName());
         assertEquals(LocalDate.of(2026, 5, 24), capturedRequest.get().date());

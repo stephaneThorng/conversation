@@ -44,7 +44,7 @@ public final class AskMenuItemHandler implements IntentHandler {
                 input.message(),
                 input.language(),
                 establishmentId);
-        return WorkflowPostProcessResult.success("ask_menu_item.found", Map.of("results", reply));
+        return WorkflowPostProcessResult.directReply(reply);
     }
 
     @Override

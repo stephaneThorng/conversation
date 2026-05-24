@@ -1,6 +1,7 @@
 package dev.stephyu.conversation.application.orchestration;
 
 import dev.stephyu.conversation.application.analysis.AnalyzedEntity;
+import dev.stephyu.conversation.application.port.outbound.ConversationReplyPort.ReplyIntent;
 import dev.stephyu.conversation.domain.ConversationState;
 import dev.stephyu.conversation.domain.slot.CollectedData;
 import dev.stephyu.conversation.domain.slot.SlotDefinition;
@@ -49,15 +50,8 @@ public final class WorkflowProcessor {
 
         List<SlotDefinition> missingRequiredSlots = updatedWorkflow.missingRequiredSlots();
         if (!missingRequiredSlots.isEmpty()) {
-            SlotDefinition nextSlot = missingRequiredSlots.getFirst();
-            List<SlotDefinition> remainingSlots = missingRequiredSlots.subList(1, missingRequiredSlots.size());
-            Map<String, String> arguments = remainingSlots.isEmpty()
-                    ? Map.of()
-                    : Map.of("remaining_slots", remainingSlots.stream()
-                            .map(slot -> slot.name().value())
-                            .reduce((a, b) -> a + ", " + b)
-                            .orElse(""));
-            return new ReplyDirective(state.withWorkflow(updatedWorkflow), nextSlot.promptKey(), arguments);
+            Map<String, String> arguments = buildSlotPromptArguments(updatedWorkflow, missingRequiredSlots);
+            return new ReplyDirective(state.withWorkflow(updatedWorkflow), ReplyIntent.ASK_SLOT, arguments);
         }
 
         boolean hasEntityUpdates = applicationResult.appliedUpdates();
@@ -68,7 +62,7 @@ public final class WorkflowProcessor {
         if (input.negative() && !hasEntityUpdates) {
             return new ReplyDirective(
                     state.withWorkflow(updatedWorkflow),
-                    messageKey(handler, "modify_prompt"),
+                    ReplyIntent.ASK_MODIFICATION,
                     Map.of());
         }
 
@@ -78,7 +72,7 @@ public final class WorkflowProcessor {
 
         return new ReplyDirective(
                 state.withWorkflow(updatedWorkflow),
-                messageKey(handler, "confirmation_summary"),
+                ReplyIntent.ASK_CONFIRMATION,
                 handler.confirmationArguments(updatedWorkflow));
     }
 
@@ -96,7 +90,7 @@ public final class WorkflowProcessor {
         if (result.success() && result.reservationReference() != null) {
             nextState = nextState.withReservationReference(result.reservationReference());
         }
-        return new ReplyDirective(nextState, result.messageKey(), result.arguments());
+        return new ReplyDirective(nextState, result.success() ? ReplyIntent.WORKFLOW_SUCCESS : ReplyIntent.WORKFLOW_FAILURE, result.arguments(), result.directReply());
     }
 
     private EntityApplicationResult applyEntities(
@@ -199,10 +193,39 @@ public final class WorkflowProcessor {
         };
     }
 
-    private static String messageKey(IntentHandler handler, String suffix) {
-        return handler.workflowType().messageKeyPrefix() + "." + suffix;
-    }
 
     private record EntityApplicationResult(CollectedData collectedData, boolean appliedUpdates) {
+    }
+
+    // Human-readable labels for each slot — sent to the Reply LLM so it asks the right question.
+    private static final Map<String, String> SLOT_LABELS = Map.of(
+            "reservation_name", "the customer name for the booking",
+            "date", "the date of the reservation",
+            "time", "the time of the reservation",
+            "people_count", "the number of guests",
+            "reference_number", "the booking reference number"
+    );
+
+    private static Map<String, String> buildSlotPromptArguments(
+            Workflow workflow,
+            List<SlotDefinition> missingRequiredSlots) {
+        Map<String, String> args = new java.util.LinkedHashMap<>();
+        // All remaining slots in order — the LLM must ask only for the first one.
+        String slotsToCollect = missingRequiredSlots.stream()
+                .map(s -> SLOT_LABELS.getOrDefault(s.name().value(), s.name().value()))
+                .reduce((a, b) -> a + " > " + b)
+                .orElse("");
+        args.put("slots_to_collect", slotsToCollect);
+        // Include already collected data so the LLM can acknowledge them naturally.
+        Map<dev.stephyu.conversation.domain.slot.SlotName, dev.stephyu.conversation.domain.slot.SlotDataValue> collected =
+                workflow.collectedData().values();
+        if (!collected.isEmpty()) {
+            String summary = collected.entrySet().stream()
+                    .map(e -> e.getKey().value() + "=" + formatSlotValue(e.getValue()))
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("");
+            args.put("already_collected", summary);
+        }
+        return Map.copyOf(args);
     }
 }

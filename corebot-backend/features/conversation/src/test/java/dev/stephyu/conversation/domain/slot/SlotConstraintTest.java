@@ -13,24 +13,24 @@ class SlotConstraintTest {
     void validatesTextMaxLength() {
         SlotConstraint constraint = new SlotConstraint.TextMaxLen(3);
 
-        assertFalse(constraint.violationKey(new SlotDataValue.TextValue("abc")).isPresent());
-        assertTrue(constraint.violationKey(new SlotDataValue.TextValue("abcd")).isPresent());
+        assertFalse(constraint.isViolated(new SlotDataValue.TextValue("abc")));
+        assertTrue(constraint.isViolated(new SlotDataValue.TextValue("abcd")));
     }
 
     @Test
     void validatesEmailFormat() {
         SlotConstraint constraint = new SlotConstraint.EmailFormat();
 
-        assertFalse(constraint.violationKey(new SlotDataValue.TextValue("user@example.com")).isPresent());
-        assertTrue(constraint.violationKey(new SlotDataValue.TextValue("invalid")).isPresent());
+        assertFalse(constraint.isViolated(new SlotDataValue.TextValue("user@example.com")));
+        assertTrue(constraint.isViolated(new SlotDataValue.TextValue("invalid")));
     }
 
     @Test
     void validatesNumberRange() {
         SlotConstraint constraint = new SlotConstraint.NumberRange(1, 6);
 
-        assertFalse(constraint.violationKey(new SlotDataValue.NumberValue(4)).isPresent());
-        assertTrue(constraint.violationKey(new SlotDataValue.NumberValue(7)).isPresent());
+        assertFalse(constraint.isViolated(new SlotDataValue.NumberValue(4)));
+        assertTrue(constraint.isViolated(new SlotDataValue.NumberValue(7)));
     }
 
     @Test
@@ -38,7 +38,7 @@ class SlotConstraintTest {
         SlotConstraint constraint = new SlotConstraint.FutureDate();
         LocalDate today = LocalDate.now(ZoneId.systemDefault());
 
-        assertFalse(constraint.violationKey(new SlotDataValue.DateValue(today)).isPresent());
-        assertTrue(constraint.violationKey(new SlotDataValue.DateValue(today.minusDays(1))).isPresent());
+        assertFalse(constraint.isViolated(new SlotDataValue.DateValue(today)));
+        assertTrue(constraint.isViolated(new SlotDataValue.DateValue(today.minusDays(1))));
     }
 }

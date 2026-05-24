@@ -49,21 +49,9 @@ class WorkflowTest {
         return new Workflow(
                 WorkflowType.RESERVATION_CREATE,
                 List.of(
-                        new SlotDefinition(
-                                SlotName.RESERVATION_NAME,
-                                true,
-                                "reservation.name.prompt",
-                                List.of()),
-                        new SlotDefinition(
-                                SlotName.PEOPLE_COUNT,
-                                true,
-                                "reservation.people.prompt",
-                                List.of()),
-                        new SlotDefinition(
-                                SlotName.DATE,
-                                false,
-                                "reservation.date.prompt",
-                                List.of())),
+                        new SlotDefinition(SlotName.RESERVATION_NAME, true, List.of()),
+                        new SlotDefinition(SlotName.PEOPLE_COUNT, true, List.of()),
+                        new SlotDefinition(SlotName.DATE, false, List.of())),
                 data,
                 confirmed);
     }

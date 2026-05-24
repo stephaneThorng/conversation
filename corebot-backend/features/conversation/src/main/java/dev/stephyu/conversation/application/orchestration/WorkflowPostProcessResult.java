@@ -1,32 +1,34 @@
 package dev.stephyu.conversation.application.orchestration;
 
 import java.util.Map;
-import java.util.Objects;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public record WorkflowPostProcessResult(
         boolean success,
-        String messageKey,
         Map<String, String> arguments,
-        @Nullable String reservationReference
+        @Nullable String reservationReference,
+        @Nullable String directReply
 ) {
 
     public WorkflowPostProcessResult {
-        Objects.requireNonNull(messageKey, "messageKey must not be null");
         arguments = Map.copyOf(arguments);
     }
 
-    public static WorkflowPostProcessResult success(String messageKey, Map<String, String> arguments) {
-        return new WorkflowPostProcessResult(true, messageKey, arguments, null);
+    public static WorkflowPostProcessResult success(Map<String, String> arguments) {
+        return new WorkflowPostProcessResult(true, arguments, null, null);
     }
 
-    public static WorkflowPostProcessResult success(String messageKey, Map<String, String> arguments, String reservationReference) {
-        return new WorkflowPostProcessResult(true, messageKey, arguments, reservationReference);
+    public static WorkflowPostProcessResult success(Map<String, String> arguments, String reservationReference) {
+        return new WorkflowPostProcessResult(true, arguments, reservationReference, null);
     }
 
-    public static WorkflowPostProcessResult failure(String messageKey, Map<String, String> arguments) {
-        return new WorkflowPostProcessResult(false, messageKey, arguments, null);
+    public static WorkflowPostProcessResult failure(Map<String, String> arguments) {
+        return new WorkflowPostProcessResult(false, arguments, null, null);
+    }
+
+    public static WorkflowPostProcessResult directReply(String reply) {
+        return new WorkflowPostProcessResult(true, Map.of(), null, reply);
     }
 }

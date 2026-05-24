@@ -5,6 +5,8 @@ import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.service.AiServices;
 import dev.stephyu.conversation.adapter.inbound.web.UserController;
 import dev.stephyu.conversation.adapter.outbound.llm.ConversationAnalyzerLlm;
+import dev.stephyu.conversation.adapter.outbound.llm.ConversationReplyLlm;
+import dev.stephyu.conversation.adapter.outbound.llm.LlmConversationReplyAdapter;
 import dev.stephyu.conversation.adapter.outbound.llm.LlmConversationAnalyzerAdapter;
 import dev.stephyu.conversation.adapter.outbound.llm.LlmMenuAssistantAdapter;
 import dev.stephyu.conversation.adapter.outbound.llm.MenuAssistantLlmFactory;
@@ -12,7 +14,6 @@ import dev.stephyu.conversation.adapter.outbound.llm.TokenUsageLoggingListener;
 import dev.stephyu.conversation.adapter.outbound.normalizer.RecognizersTextSlotValueNormalizer;
 import dev.stephyu.conversation.adapter.outbound.persistence.FakeReservationAdapter;
 import dev.stephyu.conversation.adapter.outbound.persistence.InMemoryConversationStateRepository;
-import dev.stephyu.conversation.adapter.outbound.reply.PropertiesConversationReplyCatalog;
 import dev.stephyu.conversation.adapter.outbound.reply.StaticEstablishmentResponseStyleResolver;
 import dev.stephyu.conversation.application.HandleConversationService;
 import dev.stephyu.conversation.application.orchestration.ConversationOrchestrator;
@@ -26,11 +27,11 @@ import dev.stephyu.conversation.application.orchestration.SlotValueNormalizer;
 import dev.stephyu.conversation.application.orchestration.WorkflowProcessor;
 import dev.stephyu.conversation.application.orchestration.WorkflowReplyResolver;
 import dev.stephyu.conversation.application.port.outbound.ConversationAnalyzerPort;
+import dev.stephyu.conversation.application.port.outbound.ConversationReplyPort;
 import dev.stephyu.conversation.application.port.outbound.ConversationStateRepositoryPort;
 import dev.stephyu.conversation.application.port.outbound.MenuAssistantPort;
 import dev.stephyu.conversation.application.port.outbound.ReservationRepositoryPort;
 import dev.stephyu.conversation.application.port.outbound.SearchMenuRepositoryPort;
-import dev.stephyu.conversation.application.reply.ConversationReplyCatalog;
 import dev.stephyu.conversation.application.reply.EstablishmentResponseStyleResolver;
 import dev.stephyu.conversation.application.usecase.HandleConversationUseCase;
 import dev.stephyu.config.web.HttpEndpoint;
@@ -66,6 +67,16 @@ public final class ConversationModule {
                 .listeners(List.of(new TokenUsageLoggingListener("menu-assistant")))
                 .build();
 
+        // ── Reply model: natural-language generation for all workflow outcomes ──
+        ChatModel replyModel = OllamaChatModel.builder()
+                .baseUrl("http://localhost:11434")
+                .modelName("qwen3.5:4b")
+                .temperature(0.4)
+                .think(false)
+                .listeners(List.of(new TokenUsageLoggingListener("reply")))
+                .logRequests(true)
+                .build();
+
         ConversationStateRepositoryPort conversationStateRepository = new InMemoryConversationStateRepository();
         ConversationAnalyzerLlm conversationAnalyzerLlm = AiServices.builder(ConversationAnalyzerLlm.class)
                 .chatModel(analyzerModel)
@@ -73,15 +84,19 @@ public final class ConversationModule {
                 .build();
         ConversationAnalyzerPort conversationAnalyzerPort = new LlmConversationAnalyzerAdapter(conversationAnalyzerLlm);
 
+        ConversationReplyLlm conversationReplyLlm = AiServices.builder(ConversationReplyLlm.class)
+                .chatModel(replyModel)
+                .build();
+        ConversationReplyPort conversationReplyPort = new LlmConversationReplyAdapter(conversationReplyLlm);
+
         MenuAssistantLlmFactory menuAssistantLlmFactory = new MenuAssistantLlmFactory(assistantModel, searchMenuRepositoryPort);
         MenuAssistantPort menuAssistantPort = new LlmMenuAssistantAdapter(menuAssistantLlmFactory);
 
-        ConversationReplyCatalog replyCatalog = new PropertiesConversationReplyCatalog();
         EstablishmentResponseStyleResolver responseStyleResolver = new StaticEstablishmentResponseStyleResolver();
         SlotValueNormalizer slotValueNormalizer = new RecognizersTextSlotValueNormalizer();
         ReservationRepositoryPort reservationRepositoryPort = new FakeReservationAdapter();
         WorkflowProcessor workflowProcessor = new WorkflowProcessor(slotValueNormalizer);
-        WorkflowReplyResolver workflowReplyResolver = new WorkflowReplyResolver(replyCatalog);
+        WorkflowReplyResolver workflowReplyResolver = new WorkflowReplyResolver(conversationReplyPort);
         ReservationCreateHandler reservationCreateHandler = new ReservationCreateHandler(reservationRepositoryPort);
         ReservationCheckHandler reservationCheckHandler = new ReservationCheckHandler(reservationRepositoryPort);
         ReservationCancelHandler reservationCancelHandler = new ReservationCancelHandler(reservationRepositoryPort);
@@ -96,7 +111,7 @@ public final class ConversationModule {
         ConversationOrchestrator conversationOrchestrator = new ConversationOrchestrator(
                 conversationAnalyzerPort,
                 intentHandlerRegistry,
-                replyCatalog,
+                conversationReplyPort,
                 responseStyleResolver,
                 workflowProcessor,
                 workflowReplyResolver);

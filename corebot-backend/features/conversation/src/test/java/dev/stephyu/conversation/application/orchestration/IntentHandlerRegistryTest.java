@@ -46,7 +46,7 @@ class IntentHandlerRegistryTest {
 
         @Override
         public WorkflowPostProcessResult onConfirmed(@NonNull HandlerInput input, Workflow workflow) {
-            return WorkflowPostProcessResult.success("workflow.success", Map.of());
+            return WorkflowPostProcessResult.success(Map.of());
         }
     }
 }

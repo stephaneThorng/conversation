@@ -4,7 +4,7 @@ import dev.stephyu.conversation.application.analysis.AnalyzedIntent;
 import dev.stephyu.conversation.application.analysis.AnalyzedIntentName;
 import dev.stephyu.conversation.application.analysis.ConversationAnalysisRequest;
 import dev.stephyu.conversation.application.port.outbound.ConversationAnalyzerPort;
-import dev.stephyu.conversation.application.reply.ConversationReplyCatalog;
+import dev.stephyu.conversation.application.port.outbound.ConversationReplyPort;
 import dev.stephyu.conversation.application.reply.EstablishmentResponseStyleResolver;
 import dev.stephyu.conversation.application.reply.ResponseTone;
 import dev.stephyu.conversation.domain.ConversationSession;
@@ -32,7 +32,7 @@ public final class ConversationOrchestrator {
 
     private final ConversationAnalyzerPort conversationAnalyzerPort;
     private final IntentHandlerRegistry intentHandlerRegistry;
-    private final ConversationReplyCatalog replyCatalog;
+    private final ConversationReplyPort conversationReplyPort;
     private final EstablishmentResponseStyleResolver responseStyleResolver;
     private final WorkflowProcessor workflowProcessor;
     private final WorkflowReplyResolver workflowReplyResolver;
@@ -40,13 +40,13 @@ public final class ConversationOrchestrator {
     public ConversationOrchestrator(
             ConversationAnalyzerPort conversationAnalyzerPort,
             IntentHandlerRegistry intentHandlerRegistry,
-            ConversationReplyCatalog replyCatalog,
+            ConversationReplyPort conversationReplyPort,
             EstablishmentResponseStyleResolver responseStyleResolver,
             WorkflowProcessor workflowProcessor,
             WorkflowReplyResolver workflowReplyResolver) {
         this.conversationAnalyzerPort = conversationAnalyzerPort;
         this.intentHandlerRegistry = intentHandlerRegistry;
-        this.replyCatalog = replyCatalog;
+        this.conversationReplyPort = conversationReplyPort;
         this.responseStyleResolver = responseStyleResolver;
         this.workflowProcessor = workflowProcessor;
         this.workflowReplyResolver = workflowReplyResolver;
@@ -72,7 +72,10 @@ public final class ConversationOrchestrator {
                 describeMissingRequiredSlots(session.state()));
 
         if (hasIntentNamed(analysis.intents(), AnalyzedIntentName.CANCEL)) {
-            String reply = replyCatalog.resolve(language, responseTone, "workflow.cancelled", Map.of());
+            String reply = conversationReplyPort.reply(
+                    session.sessionId().value(), language,
+                    new ConversationReplyPort.ReplyContext(ConversationReplyPort.ReplyIntent.WORKFLOW_CANCELLED, Map.of()),
+                    message);
             OrchestrationResult result = clearWorkflowWithReply(localizedSession, reply);
             LOGGER.debug("Conversation reply resolved: sessionId={}, reply={}", session.sessionId().value(), result.reply());
             return result;
@@ -128,7 +131,7 @@ public final class ConversationOrchestrator {
                 analysis.negative(),
                 language,
                 responseTone), handler);
-        HandlerResult result = workflowReplyResolver.resolve(directive, language, responseTone);
+        HandlerResult result = workflowReplyResolver.resolve(directive, language, responseTone, session.sessionId().value(), message);
         return withReply(session, result.state(), result.reply());
     }
 
@@ -140,7 +143,10 @@ public final class ConversationOrchestrator {
             ResponseTone responseTone) {
         Optional<WorkflowSelection> workflowSelection = selectWorkflow(analysis.intents());
         if (workflowSelection.isEmpty()) {
-            String reply = replyCatalog.resolve(language, responseTone, "workflow.not_understood", Map.of());
+            String reply = conversationReplyPort.reply(
+                    session.sessionId().value(), language,
+                    new ConversationReplyPort.ReplyContext(ConversationReplyPort.ReplyIntent.NOT_UNDERSTOOD, Map.of()),
+                    message);
             return withReply(session, session.state(), reply);
         }
 
@@ -175,7 +181,7 @@ public final class ConversationOrchestrator {
                 false,
                 language,
                 responseTone), handler);
-        HandlerResult result = workflowReplyResolver.resolve(directive, language, responseTone);
+        HandlerResult result = workflowReplyResolver.resolve(directive, language, responseTone, session.sessionId().value(), message);
         return withReply(session, result.state(), result.reply());
     }
 

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.stephyu.conversation.adapter.outbound.normalizer.RecognizersTextSlotValueNormalizer;
 import dev.stephyu.conversation.application.analysis.AnalyzedEntity;
 import dev.stephyu.conversation.application.analysis.AnalyzedEntityType;
+import dev.stephyu.conversation.application.port.outbound.ConversationReplyPort.ReplyIntent;
 import dev.stephyu.conversation.application.port.outbound.ReservationRepositoryPort;
 import dev.stephyu.conversation.application.reply.ResponseTone;
 import dev.stephyu.conversation.domain.ConversationSession;
@@ -30,7 +31,7 @@ class WorkflowProcessorTest {
                 successfulHandler());
 
         assertTrue(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.ask_date", directive.messageKey());
+        assertEquals(ReplyIntent.ASK_SLOT, directive.replyIntent());
     }
 
     @Test
@@ -41,7 +42,8 @@ class WorkflowProcessorTest {
                 successfulHandler());
 
         assertTrue(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.ask_time", directive.messageKey());
+        assertEquals(ReplyIntent.ASK_SLOT, directive.replyIntent());
+        assertTrue(directive.arguments().containsKey("slots_to_collect"));
     }
 
     @Test
@@ -49,7 +51,7 @@ class WorkflowProcessorTest {
         ReplyDirective directive = processor.process(inputWithEntities(completeEntities()), successfulHandler());
 
         assertTrue(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.confirmation_summary", directive.messageKey());
+        assertEquals(ReplyIntent.ASK_CONFIRMATION, directive.replyIntent());
         assertEquals("Martin", directive.arguments().get("reservation_name"));
         assertEquals("4", directive.arguments().get("people_count"));
     }
@@ -69,7 +71,7 @@ class WorkflowProcessorTest {
                 successfulHandler());
 
         assertTrue(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.confirmation_summary", directive.messageKey());
+        assertEquals(ReplyIntent.ASK_CONFIRMATION, directive.replyIntent());
         assertEquals("10", directive.arguments().get("people_count"));
     }
 
@@ -88,7 +90,7 @@ class WorkflowProcessorTest {
                 successfulHandler());
 
         assertFalse(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.success", directive.messageKey());
+        assertEquals(ReplyIntent.WORKFLOW_SUCCESS, directive.replyIntent());
     }
 
     @Test
@@ -106,7 +108,7 @@ class WorkflowProcessorTest {
                 successfulHandler());
 
         assertTrue(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.modify_prompt", directive.messageKey());
+        assertEquals(ReplyIntent.ASK_MODIFICATION, directive.replyIntent());
     }
 
     @Test
@@ -124,7 +126,7 @@ class WorkflowProcessorTest {
                 new ReservationCreateHandler(new FakeRepo(false, "full")));
 
         assertTrue(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.failure", directive.messageKey());
+        assertEquals(ReplyIntent.WORKFLOW_FAILURE, directive.replyIntent());
         assertEquals("full", directive.arguments().get("reason"));
     }
 
@@ -147,7 +149,7 @@ class WorkflowProcessorTest {
                 successfulHandler());
 
         assertTrue(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.ask_time", directive.messageKey());
+        assertEquals(ReplyIntent.ASK_SLOT, directive.replyIntent());
         assertEquals(
                 "Stephane",
                 directive.state()
@@ -172,7 +174,7 @@ class WorkflowProcessorTest {
                 successfulHandler());
 
         assertTrue(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.ask_reservation_name", directive.messageKey());
+        assertEquals(ReplyIntent.ASK_SLOT, directive.replyIntent());
         assertTrue(directive.state().activeWorkflow().orElseThrow()
                 .collectedData()
                 .valueAs(SlotName.RESERVATION_NAME, SlotDataValue.TextValue.class)
@@ -196,7 +198,7 @@ class WorkflowProcessorTest {
                 successfulHandler());
 
         assertFalse(directive.state().hasActiveWorkflow());
-        assertEquals("reservation_create.success", directive.messageKey());
+        assertEquals(ReplyIntent.WORKFLOW_SUCCESS, directive.replyIntent());
     }
 
     private static ReservationCreateHandler successfulHandler() {

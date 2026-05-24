@@ -15,10 +15,10 @@ import org.jspecify.annotations.NullMarked;
 public final class ReservationCreateHandler implements IntentHandler {
 
     private static final List<SlotDefinition> SLOT_DEFINITIONS = List.of(
-            new SlotDefinition(SlotName.RESERVATION_NAME, true, "reservation_create.ask_reservation_name", List.of()),
-            new SlotDefinition(SlotName.DATE, true, "reservation_create.ask_date", List.of()),
-            new SlotDefinition(SlotName.TIME, true, "reservation_create.ask_time", List.of()),
-            new SlotDefinition(SlotName.PEOPLE_COUNT, true, "reservation_create.ask_people_count", List.of()));
+            new SlotDefinition(SlotName.RESERVATION_NAME, true, List.of()),
+            new SlotDefinition(SlotName.DATE, true, List.of()),
+            new SlotDefinition(SlotName.TIME, true, List.of()),
+            new SlotDefinition(SlotName.PEOPLE_COUNT, true, List.of()));
 
     private final ReservationRepositoryPort reservationRepositoryPort;
 
@@ -45,11 +45,14 @@ public final class ReservationCreateHandler implements IntentHandler {
                 workflow.collectedData().valueAs(SlotName.PEOPLE_COUNT, SlotDataValue.NumberValue.class).orElseThrow().value());
         ReservationRepositoryPort.ReservationResult result = reservationRepositoryPort.createReservation(request);
         if (!result.success()) {
-            return WorkflowPostProcessResult.failure("reservation_create.failure", Map.of("reason", result.message()));
+            return WorkflowPostProcessResult.failure(Map.of(
+                    "reason", result.message(),
+                    "action_description", "The user wanted to create a reservation but it failed."));
         }
         Map<String, String> args = new java.util.HashMap<>(confirmationArguments(workflow));
         args.put("reference", result.referenceNumber());
-        return WorkflowPostProcessResult.success("reservation_create.success", Map.copyOf(args), result.referenceNumber());
+        args.put("action_description", "The user has successfully created a reservation. The reference number is " + result.referenceNumber() + ".");
+        return WorkflowPostProcessResult.success(Map.copyOf(args), result.referenceNumber());
     }
 
     @Override
@@ -58,6 +61,7 @@ public final class ReservationCreateHandler implements IntentHandler {
                 "reservation_name", workflow.collectedData().valueAs(SlotName.RESERVATION_NAME, SlotDataValue.TextValue.class).orElseThrow().value(),
                 "date", workflow.collectedData().valueAs(SlotName.DATE, SlotDataValue.DateValue.class).orElseThrow().value().toString(),
                 "time", workflow.collectedData().valueAs(SlotName.TIME, SlotDataValue.TimeValue.class).orElseThrow().value().toString(),
-                "people_count", Integer.toString(workflow.collectedData().valueAs(SlotName.PEOPLE_COUNT, SlotDataValue.NumberValue.class).orElseThrow().value()));
+                "people_count", Integer.toString(workflow.collectedData().valueAs(SlotName.PEOPLE_COUNT, SlotDataValue.NumberValue.class).orElseThrow().value()),
+                "action_description", "The user wants to create a new reservation. They need to confirm the details below.");
     }
 }

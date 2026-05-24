@@ -16,7 +16,7 @@ import org.jspecify.annotations.NullMarked;
 public final class ReservationCheckHandler implements IntentHandler {
 
     private static final List<SlotDefinition> SLOT_DEFINITIONS = List.of(
-            new SlotDefinition(SlotName.REFERENCE_NUMBER, true, "reservation_check.ask_reference_number", List.of()));
+            new SlotDefinition(SlotName.REFERENCE_NUMBER, true, List.of()));
 
     private final ReservationRepositoryPort reservationRepositoryPort;
 
@@ -55,15 +55,18 @@ public final class ReservationCheckHandler implements IntentHandler {
                 .value();
         Optional<ReservationRepositoryPort.ReservationSummary> summary = reservationRepositoryPort.findReservation(reference);
         if (summary.isEmpty()) {
-            return WorkflowPostProcessResult.failure("reservation_check.not_found", Map.of("reference", reference));
+            return WorkflowPostProcessResult.failure(Map.of(
+                    "reference", reference,
+                    "action_description", "The user wanted to check reservation " + reference + " but no reservation was found with that reference."));
         }
         ReservationRepositoryPort.ReservationSummary res = summary.get();
-        return WorkflowPostProcessResult.success("reservation_check.found", Map.of(
+        return WorkflowPostProcessResult.success(Map.of(
                 "reference", res.referenceNumber(),
                 "reservation_name", res.reservationName(),
                 "date", res.date().toString(),
                 "time", res.time().toString(),
-                "people_count", Integer.toString(res.peopleCount())));
+                "people_count", Integer.toString(res.peopleCount()),
+                "action_description", "The user checked their reservation " + reference + ". Here are the details found."));
     }
 
     @Override

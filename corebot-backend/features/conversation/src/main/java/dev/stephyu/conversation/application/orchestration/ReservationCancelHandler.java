@@ -15,7 +15,7 @@ import org.jspecify.annotations.NullMarked;
 public final class ReservationCancelHandler implements IntentHandler {
 
     private static final List<SlotDefinition> SLOT_DEFINITIONS = List.of(
-            new SlotDefinition(SlotName.REFERENCE_NUMBER, true, "reservation_cancel.ask_reference_number", List.of()));
+            new SlotDefinition(SlotName.REFERENCE_NUMBER, true, List.of()));
 
     private final ReservationRepositoryPort reservationRepositoryPort;
 
@@ -47,9 +47,13 @@ public final class ReservationCancelHandler implements IntentHandler {
                 .value();
         ReservationRepositoryPort.ReservationResult result = reservationRepositoryPort.cancelReservation(reference);
         if (!result.success()) {
-            return WorkflowPostProcessResult.failure("reservation_cancel.not_found", Map.of("reference", reference));
+            return WorkflowPostProcessResult.failure(Map.of(
+                    "reference", reference,
+                    "action_description", "The user wanted to cancel reservation " + reference + " but the cancellation failed."));
         }
-        return WorkflowPostProcessResult.success("reservation_cancel.success", Map.of("reference", reference));
+        return WorkflowPostProcessResult.success(Map.of(
+                "reference", reference,
+                "action_description", "The user has successfully cancelled reservation " + reference + "."));
     }
 
     @Override
@@ -58,7 +62,9 @@ public final class ReservationCancelHandler implements IntentHandler {
                 .valueAs(SlotName.REFERENCE_NUMBER, SlotDataValue.TextValue.class)
                 .map(SlotDataValue.TextValue::value)
                 .orElse("?");
-        return Map.of("reference", reference);
+        return Map.of(
+                "reference", reference,
+                "action_description", "The user wants to cancel reservation " + reference + ". They need to confirm this cancellation.");
     }
 }
 

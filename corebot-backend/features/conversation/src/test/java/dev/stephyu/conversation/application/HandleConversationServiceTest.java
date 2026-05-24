@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import dev.stephyu.conversation.adapter.outbound.normalizer.RecognizersTextSlotValueNormalizer;
 import dev.stephyu.conversation.adapter.outbound.persistence.FakeReservationAdapter;
 import dev.stephyu.conversation.adapter.outbound.persistence.InMemoryConversationStateRepository;
-import dev.stephyu.conversation.adapter.outbound.reply.PropertiesConversationReplyCatalog;
 import dev.stephyu.conversation.adapter.outbound.reply.StaticEstablishmentResponseStyleResolver;
 import dev.stephyu.conversation.application.analysis.AnalyzedEntity;
 import dev.stephyu.conversation.application.analysis.AnalyzedEntityType;
@@ -19,6 +18,7 @@ import dev.stephyu.conversation.application.orchestration.ReservationCreateHandl
 import dev.stephyu.conversation.application.orchestration.WorkflowProcessor;
 import dev.stephyu.conversation.application.orchestration.WorkflowReplyResolver;
 import dev.stephyu.conversation.application.port.outbound.ConversationAnalyzerPort;
+import dev.stephyu.conversation.application.port.outbound.ConversationReplyPort;
 import dev.stephyu.conversation.application.usecase.HandleConversationUseCase.HandleConversationCommand;
 import dev.stephyu.conversation.domain.ConversationTurn;
 import dev.stephyu.conversation.domain.EstablishmentId;
@@ -27,6 +27,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class HandleConversationServiceTest {
+
+    // Stub: echoes the intent name — no LLM, no catalog needed.
+    private static final ConversationReplyPort STUB_REPLY = (sessionId, language, ctx, userMessage) -> ctx.replyIntent().name();
 
     @Test
     void persistsConversationStateWithLastAssistantReply() {
@@ -45,10 +48,10 @@ class HandleConversationServiceTest {
                 "hello"));
 
         assertEquals("session-1", result.sessionId().value());
-        assertEquals("Which date would you like?", result.reply());
+        assertEquals("ASK_SLOT", result.reply());
         var savedSession = repository.findBySessionId(SessionId.of("session-1")).orElseThrow();
         assertEquals("establishment-1", savedSession.state().establishmentId().value());
-        assertEquals("Which date would you like?", savedSession.state().lastAssistantReply().orElseThrow());
+        assertEquals("ASK_SLOT", savedSession.state().lastAssistantReply().orElseThrow());
         assertEquals("en", savedSession.state().language());
         assertEquals(2, savedSession.state().recentTurns().size());
         assertEquals(ConversationTurn.Role.USER, savedSession.state().recentTurns().getFirst().role());
@@ -67,50 +70,40 @@ class HandleConversationServiceTest {
                                 AnalyzedIntentName.RESERVATION_CREATE,
                                 List.of(new AnalyzedEntity(AnalyzedEntityType.RESERVATION_NAME, "Martin")))))));
 
-        service.handle(new HandleConversationCommand(
-                SessionId.of("session-1"),
-                EstablishmentId.of("establishment-1"),
-                "first"));
-        service.handle(new HandleConversationCommand(
-                SessionId.of("session-1"),
-                EstablishmentId.of("establishment-2"),
-                "second"));
+        service.handle(new HandleConversationCommand(SessionId.of("session-1"), EstablishmentId.of("establishment-1"), "first"));
+        service.handle(new HandleConversationCommand(SessionId.of("session-1"), EstablishmentId.of("establishment-2"), "second"));
 
         var savedSession = repository.findBySessionId(SessionId.of("session-1")).orElseThrow();
         assertFalse(savedSession.state().activeWorkflow().orElseThrow().collectedData().values().isEmpty());
         assertEquals("establishment-1", savedSession.state().establishmentId().value());
-        assertEquals("Which date would you like?", savedSession.state().lastAssistantReply().orElseThrow());
+        assertEquals("ASK_SLOT", savedSession.state().lastAssistantReply().orElseThrow());
     }
 
     @Test
-    void keepsOnlyTenRecentTurns() {
+    void keepsRecentTurnsBoundedToMaximum() {
         InMemoryConversationStateRepository repository = new InMemoryConversationStateRepository();
         HandleConversationService service = new HandleConversationService(
                 repository,
                 createOrchestrator(request -> new ConversationAnalysis("en", List.of())));
 
-        for (int index = 1; index <= 6; index++) {
-            service.handle(new HandleConversationCommand(
-                    SessionId.of("session-1"),
-                    EstablishmentId.of("establishment-1"),
-                    "message-" + index));
+        // 6 calls × 2 turns each = 12, bounded to MAX_RECENT_TURNS=6
+        for (int i = 1; i <= 6; i++) {
+            service.handle(new HandleConversationCommand(SessionId.of("session-1"), EstablishmentId.of("est-1"), "msg-" + i));
         }
 
-        var savedSession = repository.findBySessionId(SessionId.of("session-1")).orElseThrow();
-        assertEquals(10, savedSession.state().recentTurns().size());
-        assertEquals("message-2", savedSession.state().recentTurns().getFirst().content());
-        assertEquals("I did not understand that request.", savedSession.state().recentTurns().getLast().content());
+        var turns = repository.findBySessionId(SessionId.of("session-1")).orElseThrow().state().recentTurns();
+        assertEquals(6, turns.size());
+        assertEquals("msg-4", turns.getFirst().content());
+        assertEquals("NOT_UNDERSTOOD", turns.getLast().content());
     }
 
     private static ConversationOrchestrator createOrchestrator(ConversationAnalyzerPort analyzerPort) {
-        var replyCatalog = new PropertiesConversationReplyCatalog();
-        var reservationHandler = new ReservationCreateHandler(new FakeReservationAdapter());
         return new ConversationOrchestrator(
                 analyzerPort,
-                new IntentHandlerRegistry(List.of(reservationHandler)),
-                replyCatalog,
+                new IntentHandlerRegistry(List.of(new ReservationCreateHandler(new FakeReservationAdapter()))),
+                STUB_REPLY,
                 new StaticEstablishmentResponseStyleResolver(),
                 new WorkflowProcessor(new RecognizersTextSlotValueNormalizer()),
-                new WorkflowReplyResolver(replyCatalog));
+                new WorkflowReplyResolver(STUB_REPLY));
     }
 }

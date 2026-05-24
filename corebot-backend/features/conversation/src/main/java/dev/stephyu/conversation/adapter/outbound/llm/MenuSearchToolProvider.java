@@ -56,7 +56,7 @@ public final class MenuSearchToolProvider {
         if (cachedMenus == null || isExpired(cachedMenusAt)) {
             LOGGER.debug("Tool getAllMenus: loading from DB for establishmentId={}", establishmentId);
             List<MenuSearchResult> results = repository.searchMenus(
-                    new MenuSearchQuery(establishmentId, null, null, null));
+                    new MenuSearchQuery(establishmentId));
             cachedMenus = formatMenus(results);
             cachedMenusAt = Instant.now();
             LOGGER.debug("Tool getAllMenus: loaded {} menus, {} chars", results.size(), cachedMenus.length());
@@ -72,7 +72,7 @@ public final class MenuSearchToolProvider {
         if (cachedMenuItems == null || isExpired(cachedMenuItemsAt)) {
             LOGGER.debug("Tool getAllMenuItems: loading from DB for establishmentId={}", establishmentId);
             List<MenuItemSearchResult> results = repository.searchMenuItems(
-                    new MenuItemSearchQuery(establishmentId, null, null, null, null, null));
+                    new MenuItemSearchQuery(establishmentId));
             cachedMenuItems = formatItems(results);
             cachedMenuItemsAt = Instant.now();
             LOGGER.debug("Tool getAllMenuItems: loaded {} items, {} chars", results.size(), cachedMenuItems.length());

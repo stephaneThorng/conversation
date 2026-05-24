@@ -8,15 +8,11 @@ import org.jspecify.annotations.NullMarked;
 public record SlotDefinition(
         SlotName name,
         boolean required,
-        String promptKey,
         List<SlotConstraint> constraints
 ) {
 
     public SlotDefinition {
         Objects.requireNonNull(name, "name must not be null");
-        if (promptKey.isBlank()) {
-            throw new IllegalArgumentException("promptKey must not be blank");
-        }
         constraints = List.copyOf(constraints);
     }
 
