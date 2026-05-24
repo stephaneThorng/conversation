@@ -2,6 +2,7 @@ package dev.stephyu.conversation.adapter.outbound.llm;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,16 +26,84 @@ class LlmConversationAnalyzerAdapterTest {
         LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
                 new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
                         "en",
-                        List.of(new ConversationAnalyzerLlm.IntentPayload(
-                                AnalyzedIntentName.RESERVATION_CREATE,
-                                List.of(new ConversationAnalyzerLlm.EntityPayload(
-                                        AnalyzedEntityType.RESERVATION_NAME,
-                                        "Martin")))))));
+                        AnalyzedIntentName.RESERVATION_CREATE,
+                        false, false, false,
+                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Martin", null, null, null, null))));
 
         var analysis = adapter.analyze(request());
 
         assertEquals(AnalyzedIntentName.RESERVATION_CREATE, analysis.firstIntent().orElseThrow().name());
         assertEquals(AnalyzedEntityType.RESERVATION_NAME, analysis.firstIntent().orElseThrow().entities().getFirst().type());
+        assertEquals("Martin", analysis.firstIntent().orElseThrow().entities().getFirst().rawValue());
+    }
+
+    @Test
+    void mapsAllReservationDetailsToEntities() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.RESERVATION_CREATE,
+                        false, false, false,
+                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Stephane", "5", "lundi prochain", "20h30", null))));
+        var analysis = adapter.analyze(request());
+        var entities = analysis.firstIntent().orElseThrow().entities();
+
+        assertEquals(4, entities.size());
+        assertEquals(AnalyzedEntityType.RESERVATION_NAME, entities.get(0).type());
+        assertEquals("Stephane", entities.get(0).rawValue());
+        assertEquals(AnalyzedEntityType.PEOPLE_COUNT, entities.get(1).type());
+        assertEquals("5", entities.get(1).rawValue());
+        assertEquals(AnalyzedEntityType.DATE, entities.get(2).type());
+        assertEquals("lundi prochain", entities.get(2).rawValue());
+        assertEquals(AnalyzedEntityType.TIME, entities.get(3).type());
+        assertEquals("20h30", entities.get(3).rawValue());
+    }
+
+    @Test
+    void noEntitiesWhenReservationDetailsIsNull() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.RESERVATION_CREATE,
+                        false, false, false,
+                        null)));
+
+        var analysis = adapter.analyze(request());
+
+        assertTrue(analysis.firstIntent().orElseThrow().entities().isEmpty());
+    }
+
+    @Test
+    void controlBooleanFlagsProduceSecondaryIntents() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.UNKNOWN,
+                        true, false, false,
+                        null)));
+
+        var analysis = adapter.analyze(request());
+
+        assertEquals(1, analysis.intents().size());
+        assertEquals(AnalyzedIntentName.UNKNOWN, analysis.intents().getFirst().name());
+        assertTrue(analysis.affirmative());
+        assertFalse(analysis.negative());
+    }
+
+    @Test
+    void negativeControlFlagProducesNegativeSignal() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.UNKNOWN,
+                        false, true, false,
+                        null)));
+
+        var analysis = adapter.analyze(request());
+
+        assertEquals(1, analysis.intents().size());
+        assertFalse(analysis.affirmative());
+        assertTrue(analysis.negative());
     }
 
     @Test
@@ -54,19 +123,21 @@ class LlmConversationAnalyzerAdapterTest {
     }
 
     @Test
-    void deserializesRawEnumValuesThroughFallbackParsers() throws Exception {
+    void deserializesRawJsonThroughFallbackParsers() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         String json = """
                 {
                   "language": "fr",
-                  "intents": [
-                    {
-                      "name": "reservation_create",
-                      "entities": [
-                        {"type": "people_count", "raw_value": "10"}
-                      ]
-                    }
-                  ]
+                  "mainIntent": "RESERVATION_CREATE",
+                  "isAffirmative": false,
+                  "isNegative": false,
+                  "isCancel": false,
+                  "reservationDetails": {
+                    "customerName": "Richard",
+                    "peopleCount": "5",
+                    "date": null,
+                    "time": null
+                  }
                 }
                 """;
 
@@ -74,24 +145,44 @@ class LlmConversationAnalyzerAdapterTest {
                 json,
                 ConversationAnalyzerLlm.ConversationAnalysisPayload.class);
 
-        assertEquals(AnalyzedIntentName.RESERVATION_CREATE, payload.intents().getFirst().name());
-        assertEquals(AnalyzedEntityType.PEOPLE_COUNT, payload.intents().getFirst().entities().getFirst().type());
+        assertEquals(AnalyzedIntentName.RESERVATION_CREATE, payload.mainIntent());
+        assertEquals("Richard", payload.reservationDetails().customerName());
+        assertEquals("5", payload.reservationDetails().peopleCount());
     }
 
     @Test
-    void unknownRawEnumValuesFallbackToUnknown() {
+    void confirmationDeserializesWithUnknownMainIntentAndAffirmativeFlag() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         String json = """
                 {
                   "language": "fr",
-                  "intents": [
-                    {
-                      "name": "reservation_make_magic",
-                      "entities": [
-                        {"type": "guest_total_magic", "raw_value": "10"}
-                      ]
-                    }
-                  ]
+                  "mainIntent": "UNKNOWN",
+                  "isAffirmative": true,
+                  "isNegative": false,
+                  "isCancel": false,
+                  "reservationDetails": null
+                }
+                """;
+
+        ConversationAnalyzerLlm.ConversationAnalysisPayload payload = objectMapper.readValue(
+                json,
+                ConversationAnalyzerLlm.ConversationAnalysisPayload.class);
+
+        assertEquals(AnalyzedIntentName.UNKNOWN, payload.mainIntent());
+        assertTrue(payload.isAffirmative());
+    }
+
+    @Test
+    void unknownRawIntentValueFallsBackToUnknown() {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        String json = """
+                {
+                  "language": "fr",
+                  "mainIntent": "MAKE_MAGIC",
+                  "isAffirmative": false,
+                  "isNegative": false,
+                  "isCancel": false,
+                  "reservationDetails": null
                 }
                 """;
 
@@ -99,24 +190,7 @@ class LlmConversationAnalyzerAdapterTest {
                 json,
                 ConversationAnalyzerLlm.ConversationAnalysisPayload.class));
 
-        assertEquals(AnalyzedIntentName.UNKNOWN, payload.intents().getFirst().name());
-        assertEquals(AnalyzedEntityType.UNKNOWN, payload.intents().getFirst().entities().getFirst().type());
-    }
-
-    @Test
-    void ignoresEntityWithoutRawValue() {
-        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
-                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
-                        "fr",
-                        List.of(new ConversationAnalyzerLlm.IntentPayload(
-                                AnalyzedIntentName.RESERVATION_CREATE,
-                                List.of(new ConversationAnalyzerLlm.EntityPayload(
-                                        AnalyzedEntityType.RESERVATION_NAME,
-                                        null)))))));
-
-        var analysis = adapter.analyze(request());
-
-        assertTrue(analysis.firstIntent().orElseThrow().entities().isEmpty());
+        assertEquals(AnalyzedIntentName.UNKNOWN, payload.mainIntent());
     }
 
     @Test
@@ -124,7 +198,9 @@ class LlmConversationAnalyzerAdapterTest {
         LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
                 new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
                         null,
-                        List.of())));
+                        null,
+                        false, false, false,
+                        null)));
 
         var analysis = adapter.analyze(request());
 
@@ -134,11 +210,11 @@ class LlmConversationAnalyzerAdapterTest {
     @Test
     void analysisPayloadFieldsExposeDescriptionsForJsonSchema() throws Exception {
         assertTrue(ConversationAnalyzerLlm.ConversationAnalysisPayload.class.isAnnotationPresent(Description.class));
-        assertTrue(ConversationAnalyzerLlm.IntentPayload.class
-                .getDeclaredField("name")
+        assertTrue(ConversationAnalyzerLlm.ConversationAnalysisPayload.class
+                .getDeclaredField("mainIntent")
                 .isAnnotationPresent(Description.class));
-        assertTrue(ConversationAnalyzerLlm.EntityPayload.class
-                .getDeclaredField("type")
+        assertTrue(ConversationAnalyzerLlm.ReservationDetailsPayload.class
+                .getDeclaredField("customerName")
                 .isAnnotationPresent(Description.class));
     }
 
@@ -185,7 +261,7 @@ class LlmConversationAnalyzerAdapterTest {
             this.collectedData = collectedData;
             this.missingRequiredSlots = missingRequiredSlots;
             this.language = language;
-            return new ConversationAnalysisPayload("en", List.of());
+            return new ConversationAnalysisPayload("en", AnalyzedIntentName.UNKNOWN, false, false, false, null);
         }
     }
 

@@ -21,12 +21,13 @@ class WorkflowReplyResolverTest {
                         "reservation_name", "Martin",
                         "date", "2026-05-24",
                         "time", "18:00",
-                        "people_count", "4"));
+                        "people_count", "4",
+                        "reference", "ABC12345"));
 
         HandlerResult result = resolver.resolve(directive, "en", ResponseTone.FRIENDLY);
 
         assertEquals(
-                "Your reservation is confirmed for Martin on 2026-05-24 at 18:00 for 4 people.",
+                "Your reservation is confirmed for Martin on 2026-05-24 at 18:00 for 4 people. Reference: ABC12345.",
                 result.reply());
     }
 }

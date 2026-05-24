@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.stephyu.conversation.adapter.outbound.normalizer.RecognizersTextSlotValueNormalizer;
 import dev.stephyu.conversation.application.analysis.AnalyzedEntity;
 import dev.stephyu.conversation.application.analysis.AnalyzedEntityType;
-import dev.stephyu.conversation.application.port.outbound.ReservationPort;
+import dev.stephyu.conversation.application.port.outbound.ReservationRepositoryPort;
 import dev.stephyu.conversation.application.reply.ResponseTone;
 import dev.stephyu.conversation.domain.ConversationSession;
 import dev.stephyu.conversation.domain.ConversationState;
@@ -57,7 +57,7 @@ class WorkflowProcessorTest {
     @Test
     void doesNotConfirmWhenAffirmativeAlsoCarriesEntityUpdates() {
         ConversationState state = new ConversationState(EstablishmentId.of("est-1"), null)
-                .withWorkflow(workflowMissingPeopleCount());
+                .withWorkflow(workflowMissingGuestCount());
         ReplyDirective directive = processor.process(new HandlerInput(
                         new ConversationSession(SessionId.of("session-1"), state),
                         "10 personnes",
@@ -121,7 +121,7 @@ class WorkflowProcessorTest {
                         false,
                         "en",
                         ResponseTone.FRIENDLY),
-                new ReservationCreateHandler(request -> new ReservationPort.ReservationResult(false, "full")));
+                new ReservationCreateHandler(new FakeRepo(false, "full")));
 
         assertTrue(directive.state().hasActiveWorkflow());
         assertEquals("reservation_create.failure", directive.messageKey());
@@ -200,7 +200,7 @@ class WorkflowProcessorTest {
     }
 
     private static ReservationCreateHandler successfulHandler() {
-        return new ReservationCreateHandler(request -> new ReservationPort.ReservationResult(true, "ok"));
+        return new ReservationCreateHandler(new FakeRepo(true, null));
     }
 
     private static HandlerInput inputWithEntities(List<AnalyzedEntity> entities) {
@@ -229,7 +229,7 @@ class WorkflowProcessorTest {
                 .orElseThrow();
     }
 
-    private static Workflow workflowMissingPeopleCount() {
+    private static Workflow workflowMissingGuestCount() {
         return processorForFixture().process(inputWithEntities(List.of(
                         new AnalyzedEntity(AnalyzedEntityType.RESERVATION_NAME, "Martin"),
                         new AnalyzedEntity(AnalyzedEntityType.DATE, "tomorrow"),
@@ -242,5 +242,20 @@ class WorkflowProcessorTest {
 
     private static WorkflowProcessor processorForFixture() {
         return new WorkflowProcessor(new RecognizersTextSlotValueNormalizer());
+    }
+
+    private record FakeRepo(boolean success, @org.jspecify.annotations.Nullable String failReason) implements ReservationRepositoryPort {
+        @Override
+        public ReservationResult createReservation(CreateReservationRequest request) {
+            return success ? ReservationResult.success("TESTREF") : ReservationResult.failure(failReason != null ? failReason : "error");
+        }
+        @Override
+        public java.util.Optional<ReservationSummary> findReservation(String ref) {
+            return java.util.Optional.empty();
+        }
+        @Override
+        public ReservationResult cancelReservation(String ref) {
+            return ReservationResult.failure("not_found");
+        }
     }
 }

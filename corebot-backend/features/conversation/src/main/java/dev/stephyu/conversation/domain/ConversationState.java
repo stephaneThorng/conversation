@@ -14,7 +14,8 @@ public record ConversationState(
         EstablishmentId establishmentId,
         @Nullable String language,
         @Nullable Workflow workflow,
-        List<ConversationTurn> recentTurns
+        List<ConversationTurn> recentTurns,
+        @Nullable String lastReservationReference
 ) {
 
     private static final int MAX_RECENT_TURNS = 10;
@@ -25,7 +26,7 @@ public record ConversationState(
     }
 
     public ConversationState(EstablishmentId establishmentId, @Nullable Workflow workflow) {
-        this(establishmentId, null, workflow, List.of());
+        this(establishmentId, null, workflow, List.of(), null);
     }
 
     public Optional<Workflow> activeWorkflow() {
@@ -36,12 +37,20 @@ public record ConversationState(
         return workflow != null;
     }
 
+    public Optional<String> reservationReference() {
+        return Optional.ofNullable(lastReservationReference);
+    }
+
     public ConversationState withWorkflow(Workflow nextWorkflow) {
-        return new ConversationState(establishmentId, language, nextWorkflow, recentTurns);
+        return new ConversationState(establishmentId, language, nextWorkflow, recentTurns, lastReservationReference);
     }
 
     public ConversationState withoutWorkflow() {
-        return new ConversationState(establishmentId, language, null, recentTurns);
+        return new ConversationState(establishmentId, language, null, recentTurns, lastReservationReference);
+    }
+
+    public ConversationState withReservationReference(String reference) {
+        return new ConversationState(establishmentId, language, workflow, recentTurns, reference);
     }
 
     public ConversationState withLastAssistantReply(String reply) {
@@ -49,7 +58,7 @@ public record ConversationState(
     }
 
     public ConversationState withLanguage(String nextLanguage) {
-        return new ConversationState(establishmentId, nextLanguage, workflow, recentTurns);
+        return new ConversationState(establishmentId, nextLanguage, workflow, recentTurns, lastReservationReference);
     }
 
     public ConversationState withUserMessage(String message) {
@@ -69,7 +78,7 @@ public record ConversationState(
     private ConversationState withAppendedTurn(ConversationTurn turn) {
         List<ConversationTurn> nextTurns = new ArrayList<>(recentTurns);
         nextTurns.add(turn);
-        return new ConversationState(establishmentId, language, workflow, nextTurns);
+        return new ConversationState(establishmentId, language, workflow, nextTurns, lastReservationReference);
     }
 
     private static List<ConversationTurn> boundedTurns(List<ConversationTurn> turns) {

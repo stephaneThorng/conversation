@@ -9,7 +9,6 @@ import dev.stephyu.conversation.application.reply.EstablishmentResponseStyleReso
 import dev.stephyu.conversation.application.reply.ResponseTone;
 import dev.stephyu.conversation.domain.ConversationSession;
 import dev.stephyu.conversation.domain.ConversationState;
-import dev.stephyu.conversation.domain.ConversationTurn;
 import dev.stephyu.conversation.domain.slot.SlotDataValue;
 import dev.stephyu.conversation.domain.workflow.Workflow;
 import dev.stephyu.conversation.domain.workflow.WorkflowType;
@@ -54,10 +53,15 @@ public final class ConversationOrchestrator {
     }
 
     public OrchestrationResult orchestrate(ConversationSession session, String message) {
+
+        // LLM analysis
         var analysis = conversationAnalyzerPort.analyze(buildAnalysisRequest(session, message));
+
+        // Detect language for the conversation, prioritizing LLM detection, then session state, then fallback
         String language = resolveLanguage(session.state(), analysis.language());
-        ResponseTone responseTone = responseStyleResolver.resolve(session.state().establishmentId());
         ConversationSession localizedSession = session.withState(session.state().withLanguage(language));
+
+        ResponseTone responseTone = responseStyleResolver.resolve(session.state().establishmentId());
         LOGGER.debug(
                 "Orchestrating conversation: sessionId={}, activeWorkflow={}, detectedLanguage={}, intents={}, recentTurnsCount={}, missingRequiredSlots={}",
                 session.sessionId().value(),
@@ -99,12 +103,13 @@ public final class ConversationOrchestrator {
                 workflow.type().name(),
                 describeCollectedData(workflow),
                 collectAllEntities(analysis.intents()));
+
         ReplyDirective directive = workflowProcessor.process(new HandlerInput(
                 session,
                 message,
                 collectAllEntities(analysis.intents()),
-                hasIntentNamed(analysis.intents(), AnalyzedIntentName.AFFIRMATIVE),
-                hasIntentNamed(analysis.intents(), AnalyzedIntentName.NEGATIVE),
+                analysis.affirmative(),
+                analysis.negative(),
                 language,
                 responseTone), handler);
         HandlerResult result = workflowReplyResolver.resolve(directive, language, responseTone);
@@ -124,13 +129,30 @@ public final class ConversationOrchestrator {
         }
 
         IntentHandler handler = workflowSelection.orElseThrow().handler();
+
+        // For RESERVATION_CHECK / RESERVATION_CANCEL: pre-fill reference from session state if available
+        ConversationSession sessionForWorkflow = session;
+        if (workflowSelection.orElseThrow().workflowType() == WorkflowType.RESERVATION_CHECK
+                && handler instanceof ReservationCheckHandler checkHandler
+                && session.state().reservationReference().isPresent()) {
+            String ref = session.state().reservationReference().orElseThrow();
+            Workflow prefilledWorkflow = checkHandler.newWorkflowWithReference(ref);
+            sessionForWorkflow = session.withState(session.state().withWorkflow(prefilledWorkflow));
+        } else if (workflowSelection.orElseThrow().workflowType() == WorkflowType.RESERVATION_CANCEL
+                && handler instanceof ReservationCancelHandler cancelHandler
+                && session.state().reservationReference().isPresent()) {
+            String ref = session.state().reservationReference().orElseThrow();
+            Workflow prefilledWorkflow = cancelHandler.newWorkflowWithReference(ref);
+            sessionForWorkflow = session.withState(session.state().withWorkflow(prefilledWorkflow));
+        }
+
         LOGGER.debug(
                 "Starting workflow from intents: sessionId={}, selectedWorkflow={}, entities={}",
                 session.sessionId().value(),
                 workflowSelection.orElseThrow().workflowType().name(),
                 collectAllEntities(analysis.intents()));
         ReplyDirective directive = workflowProcessor.process(new HandlerInput(
-                session,
+                sessionForWorkflow,
                 message,
                 collectAllEntities(analysis.intents()),
                 false,
@@ -144,7 +166,8 @@ public final class ConversationOrchestrator {
     private ConversationAnalysisRequest buildAnalysisRequest(ConversationSession session, String message) {
         ConversationState state = session.state();
         Optional<Workflow> activeWorkflow = state.activeWorkflow();
-        List<ConversationAnalysisRequest.CollectedValueSnapshot> collectedData = activeWorkflow
+
+        var collectedData = activeWorkflow
                 .map(workflow -> workflow.collectedData().values().entrySet().stream()
                         .map(entry -> new ConversationAnalysisRequest.CollectedValueSnapshot(
                                 entry.getKey().value(),
@@ -152,6 +175,7 @@ public final class ConversationOrchestrator {
                                 formatSlotValue(entry.getValue())))
                         .toList())
                 .orElse(List.of());
+
         List<String> missingRequiredSlots = activeWorkflow
                 .map(workflow -> workflow.missingRequiredSlots().stream()
                         .map(slot -> slot.name().value())
@@ -205,9 +229,8 @@ public final class ConversationOrchestrator {
     private static Optional<WorkflowType> mapWorkflowType(AnalyzedIntentName intentName) {
         return switch (intentName) {
             case RESERVATION_CREATE -> Optional.of(WorkflowType.RESERVATION_CREATE);
-            case GREETING -> Optional.of(WorkflowType.GREETING);
-            case THANKS -> Optional.of(WorkflowType.THANKS);
-            case GOODBYE -> Optional.of(WorkflowType.GOODBYE);
+            case RESERVATION_CHECK -> Optional.of(WorkflowType.RESERVATION_CHECK);
+            case RESERVATION_CANCEL -> Optional.of(WorkflowType.RESERVATION_CANCEL);
             default -> Optional.empty();
         };
     }

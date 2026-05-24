@@ -1,6 +1,6 @@
 package dev.stephyu.conversation.application.orchestration;
 
-import dev.stephyu.conversation.application.port.outbound.ReservationPort;
+import dev.stephyu.conversation.application.port.outbound.ReservationRepositoryPort;
 import dev.stephyu.conversation.domain.slot.CollectedData;
 import dev.stephyu.conversation.domain.slot.SlotDataValue;
 import dev.stephyu.conversation.domain.slot.SlotDefinition;
@@ -20,10 +20,10 @@ public final class ReservationCreateHandler implements IntentHandler {
             new SlotDefinition(SlotName.TIME, true, "reservation_create.ask_time", List.of()),
             new SlotDefinition(SlotName.PEOPLE_COUNT, true, "reservation_create.ask_people_count", List.of()));
 
-    private final ReservationPort reservationPort;
+    private final ReservationRepositoryPort reservationRepositoryPort;
 
-    public ReservationCreateHandler(ReservationPort reservationPort) {
-        this.reservationPort = reservationPort;
+    public ReservationCreateHandler(ReservationRepositoryPort reservationRepositoryPort) {
+        this.reservationRepositoryPort = reservationRepositoryPort;
     }
 
     @Override
@@ -38,16 +38,18 @@ public final class ReservationCreateHandler implements IntentHandler {
 
     @Override
     public WorkflowPostProcessResult onConfirmed(HandlerInput input, Workflow workflow) {
-        ReservationPort.CreateReservationRequest request = new ReservationPort.CreateReservationRequest(
+        ReservationRepositoryPort.CreateReservationRequest request = new ReservationRepositoryPort.CreateReservationRequest(
                 workflow.collectedData().valueAs(SlotName.RESERVATION_NAME, SlotDataValue.TextValue.class).orElseThrow().value(),
                 workflow.collectedData().valueAs(SlotName.DATE, SlotDataValue.DateValue.class).orElseThrow().value(),
                 workflow.collectedData().valueAs(SlotName.TIME, SlotDataValue.TimeValue.class).orElseThrow().value(),
                 workflow.collectedData().valueAs(SlotName.PEOPLE_COUNT, SlotDataValue.NumberValue.class).orElseThrow().value());
-        ReservationPort.ReservationResult result = reservationPort.createReservation(request);
+        ReservationRepositoryPort.ReservationResult result = reservationRepositoryPort.createReservation(request);
         if (!result.success()) {
             return WorkflowPostProcessResult.failure("reservation_create.failure", Map.of("reason", result.message()));
         }
-        return WorkflowPostProcessResult.success("reservation_create.success", confirmationArguments(workflow));
+        Map<String, String> args = new java.util.HashMap<>(confirmationArguments(workflow));
+        args.put("reference", result.referenceNumber());
+        return WorkflowPostProcessResult.success("reservation_create.success", Map.copyOf(args), result.referenceNumber());
     }
 
     @Override

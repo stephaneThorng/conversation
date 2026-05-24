@@ -8,12 +8,9 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public enum AnalyzedIntentName {
     RESERVATION_CREATE,
-    AFFIRMATIVE,
-    NEGATIVE,
+    RESERVATION_CHECK,
+    RESERVATION_CANCEL,
     CANCEL,
-    GREETING,
-    THANKS,
-    GOODBYE,
     UNKNOWN;
 
     @JsonCreator
@@ -23,12 +20,9 @@ public enum AnalyzedIntentName {
         }
         return switch (normalize(rawValue)) {
             case "reservationcreate" -> RESERVATION_CREATE;
-            case "affirmative" -> AFFIRMATIVE;
-            case "negative" -> NEGATIVE;
+            case "reservationcheck" -> RESERVATION_CHECK;
+            case "reservationcancel" -> RESERVATION_CANCEL;
             case "cancel" -> CANCEL;
-            case "greeting" -> GREETING;
-            case "thanks" -> THANKS;
-            case "goodbye" -> GOODBYE;
             default -> UNKNOWN;
         };
     }

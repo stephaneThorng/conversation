@@ -45,7 +45,8 @@ public final class PropertiesConversationReplyCatalog implements ConversationRep
                 return template;
             }
         }
-        throw new IllegalArgumentException("Missing message template for key " + messageKey);
+        // Last resort: return the raw message key so the conversation doesn't crash
+        return messageKey;
     }
 
     private static String normalizeLanguage(String language) {

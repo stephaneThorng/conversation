@@ -11,6 +11,7 @@ public enum AnalyzedEntityType {
     DATE,
     TIME,
     PEOPLE_COUNT,
+    REFERENCE_NUMBER,
     MENU_NAME,
     MENU_ITEM_NAME,
     UNKNOWN;
@@ -25,6 +26,7 @@ public enum AnalyzedEntityType {
             case "date" -> DATE;
             case "time" -> TIME;
             case "peoplecount" -> PEOPLE_COUNT;
+            case "referencenumber", "reference" -> REFERENCE_NUMBER;
             case "menuname" -> MENU_NAME;
             case "menuitemname" -> MENU_ITEM_NAME;
             default -> UNKNOWN;

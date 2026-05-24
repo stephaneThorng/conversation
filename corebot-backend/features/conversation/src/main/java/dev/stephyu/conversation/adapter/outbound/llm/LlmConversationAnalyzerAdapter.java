@@ -7,8 +7,8 @@ import dev.stephyu.conversation.application.analysis.AnalyzedIntentName;
 import dev.stephyu.conversation.application.analysis.ConversationAnalysis;
 import dev.stephyu.conversation.application.analysis.ConversationAnalysisRequest;
 import dev.stephyu.conversation.application.port.outbound.ConversationAnalyzerPort;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -38,46 +38,55 @@ public final class LlmConversationAnalyzerAdapter implements ConversationAnalyze
                 formatMissingRequiredSlots(request.missingRequiredSlots()),
                 request.awaitingConfirmation(),
                 nullableText(request.language()));
+
         String detectedLanguage = normalizeDetectedLanguage(payload.language());
         if (detectedLanguage == null) {
             LOGGER.debug("LLM language not confidently detected, rawLanguage={}", payload.language());
         }
-        List<AnalyzedIntent> intents = payload.intents().stream()
-                .map(this::mapIntent)
-                .toList();
+
+        List<AnalyzedIntent> intents = buildIntents(payload);
         ConversationAnalysis analysis = new ConversationAnalysis(
-                detectedLanguage,
-                intents);
+                detectedLanguage, intents, payload.isAffirmative(), payload.isNegative());
         LOGGER.debug("LLM analysis output: {}", formatOutputForLog(analysis));
         return analysis;
     }
 
-    private AnalyzedIntent mapIntent(ConversationAnalyzerLlm.IntentPayload payload) {
-        AnalyzedIntentName intentName = payload.name() == null ? AnalyzedIntentName.UNKNOWN : payload.name();
-        if (intentName == AnalyzedIntentName.UNKNOWN) {
-            LOGGER.debug("Unknown LLM intent received: {}", payload.name());
-        }
-        return new AnalyzedIntent(
-                intentName,
-                payload.entities().stream()
-                        .map(this::mapEntity)
-                        .flatMap(Optional::stream)
-                        .toList());
+    private static List<AnalyzedIntent> buildIntents(ConversationAnalyzerLlm.ConversationAnalysisPayload payload) {
+        AnalyzedIntentName mainIntent = payload.mainIntent() == null ? AnalyzedIntentName.UNKNOWN : payload.mainIntent();
+        List<AnalyzedEntity> entities = buildEntities(mainIntent, payload.reservationDetails());
+        return List.of(new AnalyzedIntent(mainIntent, entities));
     }
 
-    private Optional<AnalyzedEntity> mapEntity(ConversationAnalyzerLlm.EntityPayload payload) {
-        AnalyzedEntityType entityType = payload.type() == null ? AnalyzedEntityType.UNKNOWN : payload.type();
-        if (entityType == AnalyzedEntityType.UNKNOWN) {
-            LOGGER.debug("Unknown LLM entity type received: {}", payload.type());
+    private static List<AnalyzedEntity> buildEntities(
+            AnalyzedIntentName mainIntent,
+            ConversationAnalyzerLlm.@Nullable ReservationDetailsPayload details) {
+        if (details == null) {
+            return List.of();
         }
-        if (payload.raw_value() == null || payload.raw_value().isBlank()) {
-            LOGGER.debug(
-                    "Ignoring LLM entity without raw_value: type={}",
-                    payload.type());
-            return Optional.empty();
+        List<AnalyzedEntity> entities = new ArrayList<>();
+        if (mainIntent == AnalyzedIntentName.RESERVATION_CREATE) {
+            addEntity(entities, AnalyzedEntityType.RESERVATION_NAME, details.customerName());
+            addEntity(entities, AnalyzedEntityType.PEOPLE_COUNT, details.peopleCount());
+            addEntity(entities, AnalyzedEntityType.DATE, details.date());
+            addEntity(entities, AnalyzedEntityType.TIME, details.time());
+        } else if (mainIntent == AnalyzedIntentName.RESERVATION_CHECK
+                || mainIntent == AnalyzedIntentName.RESERVATION_CANCEL) {
+            addEntity(entities, AnalyzedEntityType.REFERENCE_NUMBER, details.referenceNumber());
         }
-        return Optional.of(new AnalyzedEntity(entityType, payload.raw_value()));
+        return List.copyOf(entities);
     }
+
+    private static void addEntity(List<AnalyzedEntity> entities, AnalyzedEntityType type, @org.jspecify.annotations.Nullable String rawValue) {
+        if (rawValue == null || rawValue.isBlank() || rawValue.equalsIgnoreCase("null") || rawValue.equals("0")) {
+            if (rawValue != null && !rawValue.isBlank()) {
+                LOGGER.debug("Ignoring LLM sentinel value for entity: type={}, rawValue={}", type, rawValue);
+            }
+            return;
+        }
+        entities.add(new AnalyzedEntity(type, rawValue));
+    }
+
+    // ── formatting helpers ────────────────────────────────────────────────────
 
     private static String formatInputForLog(ConversationAnalysisRequest request) {
         return "\n  message=" + quote(request.message())
@@ -93,6 +102,8 @@ public final class LlmConversationAnalyzerAdapter implements ConversationAnalyze
 
     private static String formatOutputForLog(ConversationAnalysis analysis) {
         return "\n  language=" + analysis.language()
+                + "\n  affirmative=" + analysis.affirmative()
+                + "\n  negative=" + analysis.negative()
                 + "\n  intentsCount=" + analysis.intents().size()
                 + "\n  intents=" + analysis.intents();
     }
@@ -134,9 +145,10 @@ public final class LlmConversationAnalyzerAdapter implements ConversationAnalyze
         return "\"" + value + "\"";
     }
 
-    private static @Nullable String normalizeDetectedLanguage(String language) {
+    @SuppressWarnings("NullAway")
+    private static String normalizeDetectedLanguage(String language) {
         if (language.isBlank() || language.equalsIgnoreCase("unknown")) {
-            return null;
+            return null; // NOSONAR intentionally null for fallback
         }
         return language.toLowerCase(java.util.Locale.ROOT);
     }

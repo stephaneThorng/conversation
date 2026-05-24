@@ -11,6 +11,7 @@ public record SlotName(String value, SlotDataType dataType) {
     public static final SlotName DATE = new SlotName("date", SlotDataType.DATE);
     public static final SlotName TIME = new SlotName("time", SlotDataType.TIME);
     public static final SlotName PEOPLE_COUNT = new SlotName("people_count", SlotDataType.NUMBER);
+    public static final SlotName REFERENCE_NUMBER = new SlotName("reference_number", SlotDataType.TEXT);
     public static final SlotName MENU_ITEM_NAME = new SlotName("menu_item_name", SlotDataType.TEXT);
     public static final SlotName MENU_NAME = new SlotName("menu_name", SlotDataType.TEXT);
 
@@ -30,6 +31,7 @@ public record SlotName(String value, SlotDataType dataType) {
             case DATE -> Optional.of(DATE);
             case TIME -> Optional.of(TIME);
             case PEOPLE_COUNT -> Optional.of(PEOPLE_COUNT);
+            case REFERENCE_NUMBER -> Optional.of(REFERENCE_NUMBER);
             case MENU_NAME -> Optional.of(MENU_NAME);
             case MENU_ITEM_NAME -> Optional.of(MENU_ITEM_NAME);
             case UNKNOWN -> Optional.empty();

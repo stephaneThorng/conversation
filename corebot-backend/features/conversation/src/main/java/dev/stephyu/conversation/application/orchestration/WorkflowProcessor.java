@@ -50,7 +50,14 @@ public final class WorkflowProcessor {
         List<SlotDefinition> missingRequiredSlots = updatedWorkflow.missingRequiredSlots();
         if (!missingRequiredSlots.isEmpty()) {
             SlotDefinition nextSlot = missingRequiredSlots.getFirst();
-            return new ReplyDirective(state.withWorkflow(updatedWorkflow), nextSlot.promptKey(), Map.of());
+            List<SlotDefinition> remainingSlots = missingRequiredSlots.subList(1, missingRequiredSlots.size());
+            Map<String, String> arguments = remainingSlots.isEmpty()
+                    ? Map.of()
+                    : Map.of("remaining_slots", remainingSlots.stream()
+                            .map(slot -> slot.name().value())
+                            .reduce((a, b) -> a + ", " + b)
+                            .orElse(""));
+            return new ReplyDirective(state.withWorkflow(updatedWorkflow), nextSlot.promptKey(), arguments);
         }
 
         boolean hasEntityUpdates = applicationResult.appliedUpdates();
@@ -65,6 +72,10 @@ public final class WorkflowProcessor {
                     Map.of());
         }
 
+        if (handler.skipConfirmation()) {
+            return confirm(input, handler, state, updatedWorkflow);
+        }
+
         return new ReplyDirective(
                 state.withWorkflow(updatedWorkflow),
                 messageKey(handler, "confirmation_summary"),
@@ -77,7 +88,12 @@ public final class WorkflowProcessor {
             ConversationState state,
             Workflow workflow) {
         WorkflowPostProcessResult result = handler.onConfirmed(input, workflow);
-        ConversationState nextState = result.success() ? state.withoutWorkflow() : state.withWorkflow(workflow);
+        ConversationState nextState = result.success()
+                ? state.withoutWorkflow()
+                : state.withWorkflow(workflow);
+        if (result.success() && result.reservationReference() != null) {
+            nextState = nextState.withReservationReference(result.reservationReference());
+        }
         return new ReplyDirective(nextState, result.messageKey(), result.arguments());
     }
 

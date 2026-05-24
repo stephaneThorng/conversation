@@ -6,9 +6,7 @@ import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.V;
-import dev.stephyu.conversation.application.analysis.AnalyzedEntityType;
 import dev.stephyu.conversation.application.analysis.AnalyzedIntentName;
-import java.util.List;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -16,54 +14,228 @@ import org.jspecify.annotations.Nullable;
 public interface ConversationAnalyzerLlm {
 
     @SystemMessage("""
-            You analyze user messages for a restaurant conversation workflow.
-            Return only valid JSON.
-            Detect the language, the intents and their entities.
-            Always set language. Never return null or omit it.
-            Use only one of these ISO 639-1 language codes: en, fr, de, es, it, pt, nl.
-            If the language is genuinely unclear, use unknown.
-            Supported workflow intent: RESERVATION_CREATE.
-            Supported control intents: AFFIRMATIVE, NEGATIVE, CANCEL.
-            Supported social intents: GREETING, THANKS, GOODBYE.
-            Use entity types RESERVATION_NAME, DATE, TIME, PEOPLE_COUNT when relevant.
-            Use conversation history only to understand what the latest USER message refers to.
-            Extract entities only from the latest USER message.
-            Do not repeat or copy collectedData values into the output unless the user restates or changes them in the current message.
-            Use workflow context only to understand which slot the user is likely answering.
-            If reservation_name is missing and the latest USER message is only a person name or a phrase like "au nom de Stephane", extract RESERVATION_NAME from that message.
-            If the latest USER message contains a reservation intent together with a booking name and people count, extract all explicit entities from that same message.
-            Do not use an intent phrase like "je veux reserver", "I want to book" or "reservation" as reservation_name.
-            A user saying they want to reserve, book, reserver, reserve or make a booking is RESERVATION_CREATE, not NEGATIVE.
-            NEGATIVE is only for explicit refusal or correction such as no, non, not this, or I do not confirm.
-            Do not infer today's date just because a reservation workflow is active.
-            Each entity must include a non-empty raw_value copied from the current user message.
-            If you cannot provide a non-empty raw_value for an entity, omit that entity.
-            Example:
-            current user message: "Bonjour, je souhaite reserver"
-            output intents: GREETING, RESERVATION_CREATE
-            output entities: none
-            Example:
-            current user message: "Bonjour je veux reserver pour Richard pour 5 personnes"
-            output language: fr
-            output intents: RESERVATION_CREATE
-            output entities: [{type: RESERVATION_NAME, raw_value: "Richard"}, {type: PEOPLE_COUNT, raw_value: "5"}]
-            Example:
-            missingRequiredSlots contains reservation_name
-            conversation history:
-            ASSISTANT: "Quel nom dois-je utiliser pour la reservation ?"
-            current user message: "Stephane"
-            output language: fr
-            output intents: RESERVATION_CREATE
-            output entities: [{type: RESERVATION_NAME, raw_value: "Stephane"}]
-            Example:
-            current user message: "Bonjour, je souhaite reserver"
-            output language: fr
-            Example:
-            current user message: "Hello, I want to book"
-            output language: en
+            You are a data-extraction engine for a restaurant booking assistant.
+            Your only job is to fill the JSON schema below — nothing else.
+            Never add commentary. Return only valid JSON that matches the schema.
+
+            ── FEW-SHOT EXAMPLES ──
+
+            Example 1 — booking intent only, NO slot data → all reservation fields must be null:
+            message: "Bonjour je souhaite réserver"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CREATE",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false
+            }
+
+            Example 2 — booking with name and people count (ignore greeting/thanks):
+            message: "Bonjour ! Je veux réserver au nom de Stephane pour 5 personnes, merci !"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CREATE",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "customerName": "Stephane",
+                "peopleCount": "5",
+              }
+            }
+
+            Example 3 — single slot answer (name):
+            missingRequiredSlots: reservation_name
+            previous assistant message: "Quel nom dois-je utiliser pour la réservation ?"
+            message: "richard"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CREATE",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "customerName": "richard"
+              }
+            }
+
+            Example 4 — date and time in the same message:
+            missingRequiredSlots: date, time
+            message: "dans 2 jours à 20h30"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CREATE",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "date": "dans 2 jours",
+                "time": "20h30"
+              }
+            }
+
+            Example 4b — short ambiguous message (bare date) with active workflow → inherit activeWorkflowType:
+            activeWorkflowType: RESERVATION_CREATE
+            missingRequiredSlots: date
+            message: "lundi prochain"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CREATE",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "date": "lundi prochain"
+              }
+            }
+
+            Example 5 — user confirms (no new data):
+            message: "oui c'est parfait"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "UNKNOWN",
+              "isAffirmative": true,
+              "isNegative": false,
+              "isCancel": false
+            }
+
+            Example 6 — user refuses without new data:
+            message: "non"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "UNKNOWN",
+              "isAffirmative": false,
+              "isNegative": true,
+              "isCancel": false
+            }
+
+            Example 7 — user refuses AND provides a new date:
+            awaitingConfirmation: true
+            collectedData: date=2026-05-25, reservation_name=Stephane, people_count=15, time=19:30
+            message: "je préfère plutôt pour le 26 mai"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CREATE",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "date": "le 26 mai"
+              }
+            }
+
+            Example 8 — user provides only a corrected date:
+            awaitingConfirmation: true
+            collectedData: date=2026-05-25, reservation_name=Stephane, people_count=15, time=19:30
+            message: "le 26 mai"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CREATE",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "date": "le 26 mai"
+              }
+            }
+
+            Example 9 — user cancels:
+            message: "annuler"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "CANCEL",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": true
+            }
+
+            Example 10 — single slot answer (people count):
+            activeWorkflowType: RESERVATION_CREATE
+            missingRequiredSlots: people_count
+            message: "5"
+            output:
+            {
+              "language": "en",
+              "mainIntent": "RESERVATION_CREATE",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "peopleCount": "5"
+              }
+            }
+
+            Example 11 — user provides a reservation reference number:
+            activeWorkflowType: RESERVATION_CHECK
+            missingRequiredSlots: reference_number
+            message: "1EBC495E"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CHECK",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "referenceNumber": "1EBC495E"
+              }
+            }
+
+            Example 12 — user provides a reference number with prefix:
+            activeWorkflowType: RESERVATION_CHECK
+            missingRequiredSlots: reference_number
+            message: "reference 1EBC495E"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CHECK",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "referenceNumber": "1EBC495E"
+              }
+            }
+
+            Example 13 — user wants to cancel a reservation:
+            message: "je souhaite annuler ma réservation"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CANCEL",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false
+            }
+
+            Example 14 — user provides a reference number for cancellation:
+            activeWorkflowType: RESERVATION_CANCEL
+            missingRequiredSlots: reference_number
+            message: "1EBC495E"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "RESERVATION_CANCEL",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "reservationDetails": {
+                "referenceNumber": "1EBC495E"
+              }
+            }
             """)
     @UserMessage("""
-            Analyze the current restaurant conversation and answer with structured data.
+            Extract structured data from the latest user message.
 
             Latest user message:
             {{message}}
@@ -74,7 +246,6 @@ public interface ConversationAnalyzerLlm {
             Conversation language hint:
             {{language}}
 
-            Workflow context:
             Active workflow type:
             {{activeWorkflowType}}
 
@@ -97,50 +268,50 @@ public interface ConversationAnalyzerLlm {
             @V("awaitingConfirmation") boolean awaitingConfirmation,
             @V("language") String language);
 
-    @Description("Structured analysis of the latest user message in the restaurant conversation.")
+    @Description("Structured extraction of the latest user message for the restaurant assistant.")
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ConversationAnalysisPayload(
-            @Description("Detected ISO 639-1 language code of the user message. Must be one of: en, fr, de, es, it, pt, nl, unknown. Never null.")
+            @Description("Detected ISO 639-1 language code. One of: en, fr, de, es, it, pt, nl, unknown. Never null.")
             String language,
-            @Description("Intents explicitly expressed by the latest user message, in the order they should be handled.")
-            List<IntentPayload> intents
+            @Description("""
+                    The single primary actionable intent of the latest user message.
+                    Use RESERVATION_CREATE for any booking action or slot correction.
+                    Use RESERVATION_CHECK when the user wants to look up an existing reservation.
+                    Use RESERVATION_CANCEL when the user wants to cancel an existing reservation.
+                    Use CANCEL when the user wants to abort the current in-progress workflow.
+                    Use UNKNOWN for pure confirmations, pure refusals, or unrecognized messages.
+                    Do NOT use AFFIRMATIVE or NEGATIVE here — use the boolean flags instead.
+                    When the message is short or ambiguous (e.g. a bare date, a name, a number, a time)
+                    and activeWorkflowType is set and not "none", use that workflow type as the intent.
+                    """)
+            @Nullable AnalyzedIntentName mainIntent,
+            @Description("True when the user is confirming without new data (yes, oui, ok, d'accord, parfait …). Independent of mainIntent.")
+            boolean isAffirmative,
+            @Description("True when the user is explicitly refusing without providing any new slot value (no, non, pas ça …). Independent of mainIntent.")
+            boolean isNegative,
+            @Description("True when the user wants to abort the current workflow (cancel, annuler, stop …). Set mainIntent = CANCEL too.")
+            boolean isCancel,
+            @Description("Reservation slot values extracted from the latest user message. Set to null when mainIntent is not RESERVATION_CREATE or RESERVATION_CHECK.")
+            @Nullable ReservationDetailsPayload reservationDetails
     ) {
         public ConversationAnalysisPayload {
             language = normalizeLanguage(language);
-            intents = intents == null ? List.of() : List.copyOf(intents);
         }
     }
 
-    @Description("One user intent detected in the latest message.")
+    @Description("Reservation slot values extracted verbatim from the latest user message. NEVER invent or guess values. Every field must be null if not explicitly present in the message.")
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record IntentPayload(
-            @Description("""
-                    Intent name. Use RESERVATION_CREATE to start or continue a reservation workflow.
-                    Use AFFIRMATIVE, NEGATIVE or CANCEL only for workflow control replies.
-                    Use GREETING, THANKS or GOODBYE for simple social turns.
-                    Use UNKNOWN only when no supported intent matches.
-                    """)
-            @Nullable AnalyzedIntentName name,
-            @Description("Entities explicitly present in the latest user message for this intent.")
-            List<EntityPayload> entities
-    ) {
-        public IntentPayload {
-            entities = entities == null ? List.of() : List.copyOf(entities);
-        }
-    }
-
-    @Description("One entity extracted from the latest user message.")
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record EntityPayload(
-            @Description("""
-                    Entity type. Use RESERVATION_NAME for the booking name, DATE for reservation date,
-                    TIME for reservation time, PEOPLE_COUNT for the number of guests.
-                    Use MENU_NAME and MENU_ITEM_NAME only for menu-related questions.
-                    Use UNKNOWN only when no supported entity type matches.
-                    """)
-            @Nullable AnalyzedEntityType type,
-            @Description("Original extracted value exactly as expressed in the latest user message.")
-            String raw_value
+    record ReservationDetailsPayload(
+            @Description("Person name for the booking, copied verbatim from the message (e.g. 'Richard', 'Martin'). NULL if no name is explicitly written in the message. NEVER invent a name.")
+            @Nullable String customerName,
+            @Description("Number of guests as written in the message (e.g. '5', 'deux', 'two'). NULL if no people count is explicitly written in the message.")
+            @Nullable String peopleCount,
+            @Description("Date expression copied verbatim from the message (e.g. 'lundi prochain', 'dans 2 jours', 'dimanche 24 mai 2026'). NULL if no date is explicitly written in the message.")
+            @Nullable String date,
+            @Description("Time expression copied verbatim from the message (e.g. '20h30', '8pm', 'ce soir'). NULL if no time is explicitly written in the message.")
+            @Nullable String time,
+            @Description("Reservation reference number copied verbatim from the message (e.g. '1EBC495E', 'ABC12345'). Extract only the alphanumeric code, strip any prefix like 'reference' or 'ref'. NULL if not present.")
+            @Nullable String referenceNumber
     ) {
     }
 

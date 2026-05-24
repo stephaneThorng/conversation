@@ -38,6 +38,7 @@ public final class RecognizersTextSlotValueNormalizer implements SlotValueNormal
     public Optional<SlotDataValue> normalize(AnalyzedEntity entity, SlotName slotName, SlotNormalizationContext context) {
         return switch (slotName.value()) {
             case "reservation_name" -> Optional.of(new SlotDataValue.TextValue(entity.rawValue()));
+            case "reference_number" -> Optional.of(new SlotDataValue.TextValue(entity.rawValue().trim().toUpperCase(java.util.Locale.ROOT)));
             case "people_count" -> normalizeNumber(entity, context).map(SlotDataValue.NumberValue::new);
             case "date" -> normalizeDate(entity, context).map(SlotDataValue.DateValue::new);
             case "time" -> normalizeTime(entity, context).map(SlotDataValue.TimeValue::new);
