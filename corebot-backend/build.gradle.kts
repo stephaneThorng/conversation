@@ -9,6 +9,7 @@ plugins {
     base
     id("net.ltgt.errorprone") version "5.1.0" apply false
     id("net.ltgt.nullaway") version "2.2.0" apply false
+    id("nu.studer.jooq") version "9.0" apply false
 }
 
 group = "dev.stephyu"

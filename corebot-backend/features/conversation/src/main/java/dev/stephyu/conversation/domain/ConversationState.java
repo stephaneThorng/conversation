@@ -18,7 +18,7 @@ public record ConversationState(
         @Nullable String lastReservationReference
 ) {
 
-    private static final int MAX_RECENT_TURNS = 10;
+    private static final int MAX_RECENT_TURNS = 6;
 
     public ConversationState {
         Objects.requireNonNull(establishmentId, "establishmentId must not be null");

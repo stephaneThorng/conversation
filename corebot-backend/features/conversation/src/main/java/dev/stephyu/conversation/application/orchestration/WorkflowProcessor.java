@@ -88,7 +88,9 @@ public final class WorkflowProcessor {
             ConversationState state,
             Workflow workflow) {
         WorkflowPostProcessResult result = handler.onConfirmed(input, workflow);
-        ConversationState nextState = result.success()
+        // Clear the workflow on both success and failure when confirmation is skipped,
+        // so the user is never stuck in a failed workflow state.
+        ConversationState nextState = (result.success() || handler.skipConfirmation())
                 ? state.withoutWorkflow()
                 : state.withWorkflow(workflow);
         if (result.success() && result.reservationReference() != null) {

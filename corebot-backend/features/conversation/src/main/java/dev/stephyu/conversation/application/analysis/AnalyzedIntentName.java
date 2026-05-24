@@ -10,6 +10,8 @@ public enum AnalyzedIntentName {
     RESERVATION_CREATE,
     RESERVATION_CHECK,
     RESERVATION_CANCEL,
+    ASK_MENU,
+    ASK_MENU_ITEM,
     CANCEL,
     UNKNOWN;
 
@@ -22,6 +24,8 @@ public enum AnalyzedIntentName {
             case "reservationcreate" -> RESERVATION_CREATE;
             case "reservationcheck" -> RESERVATION_CHECK;
             case "reservationcancel" -> RESERVATION_CANCEL;
+            case "askmenu", "menusearch", "menu" -> ASK_MENU;
+            case "askmenuitem", "menuitemsearch", "menuitem", "dishsearch", "dish" -> ASK_MENU_ITEM;
             case "cancel" -> CANCEL;
             default -> UNKNOWN;
         };

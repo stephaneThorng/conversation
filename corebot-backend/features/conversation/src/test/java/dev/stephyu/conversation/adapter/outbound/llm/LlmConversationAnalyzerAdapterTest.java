@@ -31,7 +31,8 @@ class LlmConversationAnalyzerAdapterTest {
                         "en",
                         AnalyzedIntentName.RESERVATION_CREATE,
                         false, false, false,
-                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Martin", null, null, null, null))));
+                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Martin", null, null, null, null),
+                         null)));
 
         var analysis = adapter.analyze(request());
 
@@ -47,7 +48,8 @@ class LlmConversationAnalyzerAdapterTest {
                         "fr",
                         AnalyzedIntentName.RESERVATION_CREATE,
                         false, false, false,
-                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Stephane", "5", "lundi prochain", "20h30", null))));
+                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Stephane", "5", "lundi prochain", "20h30", null),
+                         null)));
         var analysis = adapter.analyze(request());
         var entities = analysis.firstIntent().orElseThrow().entities();
 
@@ -69,6 +71,7 @@ class LlmConversationAnalyzerAdapterTest {
                         "fr",
                         AnalyzedIntentName.RESERVATION_CREATE,
                         false, false, false,
+                        null,
                         null)));
 
         var analysis = adapter.analyze(request());
@@ -83,6 +86,7 @@ class LlmConversationAnalyzerAdapterTest {
                         "fr",
                         AnalyzedIntentName.UNKNOWN,
                         true, false, false,
+                        null,
                         null)));
 
         var analysis = adapter.analyze(request());
@@ -100,6 +104,7 @@ class LlmConversationAnalyzerAdapterTest {
                         "fr",
                         AnalyzedIntentName.UNKNOWN,
                         false, true, false,
+                        null,
                         null)));
 
         var analysis = adapter.analyze(request());
@@ -203,6 +208,7 @@ class LlmConversationAnalyzerAdapterTest {
                         null,
                         null,
                         false, false, false,
+                        null,
                         null)));
 
         var analysis = adapter.analyze(request());
@@ -264,7 +270,7 @@ class LlmConversationAnalyzerAdapterTest {
             this.collectedData = collectedData;
             this.missingRequiredSlots = missingRequiredSlots;
             this.language = language;
-            return new ConversationAnalysisPayload("en", AnalyzedIntentName.UNKNOWN, false, false, false, null);
+            return new ConversationAnalysisPayload("en", AnalyzedIntentName.UNKNOWN, false, false, false, null, null);
         }
     }
 

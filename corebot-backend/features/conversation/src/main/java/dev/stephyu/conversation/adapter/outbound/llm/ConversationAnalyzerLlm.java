@@ -229,9 +229,78 @@ public interface ConversationAnalyzerLlm {
               "isAffirmative": false,
               "isNegative": false,
               "isCancel": false,
-              "reservationDetails": {
-                "referenceNumber": "1EBC495E"
+                "reservationDetails": {
+                  "referenceNumber": "1EBC495E"
+                }
+            }
+
+            Example 15 — user asks for a menu by name:
+            message: "montre-moi le menu a la carte"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "ASK_MENU",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "menuSearchDetails": {
+                "menuName": "a la carte"
               }
+            }
+
+            Example 16 — user asks for vegan dishes under 10 euros:
+            message: "quels plats vegan a moins de 10 euros ?"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "ASK_MENU_ITEM",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "menuSearchDetails": {
+                "dietaryRestrictionCode": "vegan",
+                "priceComparator": "LESSER_THAN",
+                "minPriceCents": "1000"
+              }
+            }
+
+            Example 17 — user asks for menus containing an ingredient:
+            message: "which menus have papaya?"
+            output:
+            {
+              "language": "en",
+              "mainIntent": "ASK_MENU",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "menuSearchDetails": {
+                "ingredient": "papaya"
+              }
+            }
+
+            Example 18 — user asks for dishes with an ingredient (incomplete or vague phrasing):
+            message: "quel sont les plat avec du soja ?"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "ASK_MENU_ITEM",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false,
+              "menuSearchDetails": {
+                "ingredient": "soja"
+              }
+            }
+
+            Example 19 — incomplete message, no recognizable filter → return no menuSearchDetails:
+            message: "quel sont les plat avec des"
+            output:
+            {
+              "language": "fr",
+              "mainIntent": "ASK_MENU_ITEM",
+              "isAffirmative": false,
+              "isNegative": false,
+              "isCancel": false
             }
             """)
     @UserMessage("""
@@ -278,6 +347,8 @@ public interface ConversationAnalyzerLlm {
                     Use RESERVATION_CREATE for any booking action or slot correction.
                     Use RESERVATION_CHECK when the user wants to look up an existing reservation.
                     Use RESERVATION_CANCEL when the user wants to cancel an existing reservation.
+                    Use ASK_MENU when the user asks about a menu or menus.
+                    Use ASK_MENU_ITEM when the user asks about dishes / menu items.
                     Use CANCEL when the user wants to abort the current in-progress workflow.
                     Use UNKNOWN for pure confirmations, pure refusals, or unrecognized messages.
                     Do NOT use AFFIRMATIVE or NEGATIVE here — use the boolean flags instead.
@@ -292,7 +363,9 @@ public interface ConversationAnalyzerLlm {
             @Description("True when the user wants to abort the current workflow (cancel, annuler, stop …). Set mainIntent = CANCEL too.")
             boolean isCancel,
             @Description("Reservation slot values extracted from the latest user message. Set to null when mainIntent is not RESERVATION_CREATE or RESERVATION_CHECK.")
-            @Nullable ReservationDetailsPayload reservationDetails
+            @Nullable ReservationDetailsPayload reservationDetails,
+            @Description("Menu search filters extracted from the latest user message. Set to null when mainIntent is not ASK_MENU or ASK_MENU_ITEM.")
+            @Nullable MenuSearchDetailsPayload menuSearchDetails
     ) {
         public ConversationAnalysisPayload {
             language = normalizeLanguage(language);
@@ -312,6 +385,28 @@ public interface ConversationAnalyzerLlm {
             @Nullable String time,
             @Description("Reservation reference number copied verbatim from the message (e.g. '1EBC495E', 'ABC12345'). Extract only the alphanumeric code, strip any prefix like 'reference' or 'ref'. NULL if not present.")
             @Nullable String referenceNumber
+    ) {
+    }
+
+    @Description("Menu search filters extracted from the latest user message. Prefer normalized reference codes for allergen/diet and price amounts expressed in cents.")
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record MenuSearchDetailsPayload(
+            @Description("Menu name copied from the message. NULL if absent.")
+            @Nullable String menuName,
+            @Description("Menu item or dish name copied from the message. NULL if absent.")
+            @Nullable String menuItemName,
+            @Description("Ingredient term explicitly named in the message (e.g. 'soja', 'papaya', 'cheddar'). NULL if absent or if the message is incomplete (e.g. ends with 'avec des' without a noun).")
+            @Nullable String ingredient,
+            @Description("Normalized allergen reference code ONLY if an allergen is explicitly named in the message, e.g. gluten, soy, peanut, fish, dairy, sesame, egg, crustacean, tree_nut. NULL if absent or ambiguous.")
+            @Nullable String allergenCode,
+            @Description("Normalized dietary restriction code ONLY if an explicit dietary label appears in the message, e.g. vegan, gluten_free, vegetarian, contains_alcohol. NULL if absent, inferred, or ambiguous.")
+            @Nullable String dietaryRestrictionCode,
+            @Description("Price comparator when present. One of GREATER_THAN, LESSER_THAN, EQUAL, BETWEEN.")
+            @Nullable String priceComparator,
+            @Description("Lower or single price bound expressed in cents as an integer string, e.g. 1200 for 12 EUR.")
+            @Nullable String minPriceCents,
+            @Description("Upper price bound expressed in cents as an integer string when comparator is BETWEEN.")
+            @Nullable String maxPriceCents
     ) {
     }
 

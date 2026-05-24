@@ -53,25 +53,36 @@ public final class LlmConversationAnalyzerAdapter implements ConversationAnalyze
 
     private static List<AnalyzedIntent> buildIntents(ConversationAnalyzerLlm.ConversationAnalysisPayload payload) {
         AnalyzedIntentName mainIntent = payload.mainIntent() == null ? AnalyzedIntentName.UNKNOWN : payload.mainIntent();
-        List<AnalyzedEntity> entities = buildEntities(mainIntent, payload.reservationDetails());
+        List<AnalyzedEntity> entities = buildEntities(mainIntent, payload.reservationDetails(), payload.menuSearchDetails());
         return List.of(new AnalyzedIntent(mainIntent, entities));
     }
 
     private static List<AnalyzedEntity> buildEntities(
             AnalyzedIntentName mainIntent,
-            ConversationAnalyzerLlm.@Nullable ReservationDetailsPayload details) {
-        if (details == null) {
-            return List.of();
-        }
+            ConversationAnalyzerLlm.@Nullable ReservationDetailsPayload details,
+            ConversationAnalyzerLlm.@Nullable MenuSearchDetailsPayload menuSearchDetails) {
         List<AnalyzedEntity> entities = new ArrayList<>();
-        if (mainIntent == AnalyzedIntentName.RESERVATION_CREATE) {
+        if (mainIntent == AnalyzedIntentName.RESERVATION_CREATE && details != null) {
             addEntity(entities, AnalyzedEntityType.RESERVATION_NAME, details.customerName());
             addEntity(entities, AnalyzedEntityType.PEOPLE_COUNT, details.peopleCount());
             addEntity(entities, AnalyzedEntityType.DATE, details.date());
             addEntity(entities, AnalyzedEntityType.TIME, details.time());
         } else if (mainIntent == AnalyzedIntentName.RESERVATION_CHECK
                 || mainIntent == AnalyzedIntentName.RESERVATION_CANCEL) {
+            if (details == null) {
+                return List.copyOf(entities);
+            }
             addEntity(entities, AnalyzedEntityType.REFERENCE_NUMBER, details.referenceNumber());
+        } else if ((mainIntent == AnalyzedIntentName.ASK_MENU || mainIntent == AnalyzedIntentName.ASK_MENU_ITEM)
+                && menuSearchDetails != null) {
+            addEntity(entities, AnalyzedEntityType.MENU_NAME, menuSearchDetails.menuName());
+            addEntity(entities, AnalyzedEntityType.MENU_ITEM_NAME, menuSearchDetails.menuItemName());
+            addEntity(entities, AnalyzedEntityType.MENU_INGREDIENT, menuSearchDetails.ingredient());
+            addEntity(entities, AnalyzedEntityType.MENU_ALLERGEN_CODE, menuSearchDetails.allergenCode());
+            addEntity(entities, AnalyzedEntityType.MENU_DIETARY_RESTRICTION_CODE, menuSearchDetails.dietaryRestrictionCode());
+            addEntity(entities, AnalyzedEntityType.MENU_PRICE_COMPARATOR, menuSearchDetails.priceComparator());
+            addEntity(entities, AnalyzedEntityType.MENU_PRICE_MIN_CENTS, menuSearchDetails.minPriceCents());
+            addEntity(entities, AnalyzedEntityType.MENU_PRICE_MAX_CENTS, menuSearchDetails.maxPriceCents());
         }
         return List.copyOf(entities);
     }
@@ -85,6 +96,10 @@ public final class LlmConversationAnalyzerAdapter implements ConversationAnalyze
         }
         entities.add(new AnalyzedEntity(type, rawValue));
     }
+
+    // Assistant replies can be very long (lists of dishes). Truncate them to avoid
+    // overflowing the LLM context window and triggering hallucinated output.
+    private static final int MAX_ASSISTANT_TURN_CHARS = 300;
 
     // ── formatting helpers ────────────────────────────────────────────────────
 
@@ -133,7 +148,14 @@ public final class LlmConversationAnalyzerAdapter implements ConversationAnalyze
             return "none";
         }
         return recentTurns.stream()
-                .map(turn -> turn.role().name() + ": " + quote(turn.content()))
+                .map(turn -> {
+                    String content = turn.content();
+                    // Truncate long assistant replies to avoid saturating the LLM context.
+                    if (turn.role().name().equals("ASSISTANT") && content.length() > MAX_ASSISTANT_TURN_CHARS) {
+                        content = content.substring(0, MAX_ASSISTANT_TURN_CHARS) + "…[tronqué]";
+                    }
+                    return turn.role().name() + ": " + quote(content);
+                })
                 .collect(Collectors.joining(" | "));
     }
 

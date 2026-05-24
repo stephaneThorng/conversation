@@ -79,6 +79,22 @@ public final class ConversationOrchestrator {
         }
 
         if (localizedSession.state().hasActiveWorkflow()) {
+            // If the detected intent maps to a different workflow type than the active one,
+            // or to the same workflow type but with a fresh intent (no leftover data needed),
+            // abandon the current workflow and start fresh.
+            Workflow activeWorkflow = localizedSession.state().activeWorkflow().orElseThrow();
+            Optional<WorkflowType> detectedWorkflowType = analysis.intents().stream()
+                    .map(intent -> mapWorkflowType(intent.name()))
+                    .flatMap(Optional::stream)
+                    .findFirst();
+            boolean shouldSwitchWorkflow = detectedWorkflowType.isPresent()
+                    && detectedWorkflowType.orElseThrow() != activeWorkflow.type();
+            if (shouldSwitchWorkflow) {
+                ConversationSession clearedSession = localizedSession.withState(localizedSession.state().withoutWorkflow());
+                OrchestrationResult result = handleWithoutActiveWorkflow(clearedSession, message, analysis, language, responseTone);
+                LOGGER.debug("Conversation reply resolved: sessionId={}, reply={}", session.sessionId().value(), result.reply());
+                return result;
+            }
             OrchestrationResult result = handleActiveWorkflow(localizedSession, message, analysis, language, responseTone);
             LOGGER.debug("Conversation reply resolved: sessionId={}, reply={}", session.sessionId().value(), result.reply());
             return result;
@@ -231,6 +247,8 @@ public final class ConversationOrchestrator {
             case RESERVATION_CREATE -> Optional.of(WorkflowType.RESERVATION_CREATE);
             case RESERVATION_CHECK -> Optional.of(WorkflowType.RESERVATION_CHECK);
             case RESERVATION_CANCEL -> Optional.of(WorkflowType.RESERVATION_CANCEL);
+            case ASK_MENU -> Optional.of(WorkflowType.ASK_MENU);
+            case ASK_MENU_ITEM -> Optional.of(WorkflowType.ASK_MENU_ITEM);
             default -> Optional.empty();
         };
     }
