@@ -1,4 +1,5 @@
 package dev.stephyu.config.dependency;
+import dev.stephyu.config.app.LlmModelConfig;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
@@ -46,11 +47,12 @@ public final class ConversationModule {
 
     public List<HttpEndpoint> httpEndpoints(SearchMenuRepositoryPort searchMenuRepositoryPort) {
         Objects.requireNonNull(searchMenuRepositoryPort, "searchMenuRepositoryPort must not be null");
+        LlmModelConfig llmModelConfig = LlmModelConfig.fromEnvironment();
 
         // ── Analyzer model: structured JSON extraction (requires JSON schema support) ──
         OllamaChatModel analyzerModel = OllamaChatModel.builder()
-                .baseUrl("http://localhost:11434")
-                .modelName("qwen3.5:9b")
+                .baseUrl(llmModelConfig.baseUrl())
+                .modelName(llmModelConfig.analyzerModel())
                 .supportedCapabilities(RESPONSE_FORMAT_JSON_SCHEMA)
                 .temperature(0.0)
                 .topP(0.1)
@@ -60,8 +62,8 @@ public final class ConversationModule {
 
         // ── Assistant model: tool calling + natural-language generation ──
         ChatModel assistantModel = OllamaChatModel.builder()
-                .baseUrl("http://localhost:11434")
-                .modelName("qwen3.5:9b")
+                .baseUrl(llmModelConfig.baseUrl())
+                .modelName(llmModelConfig.menuAssistantModel())
                 .temperature(0.3)
                 .think(false)
                 .listeners(List.of(new TokenUsageLoggingListener("menu-assistant")))
@@ -69,8 +71,8 @@ public final class ConversationModule {
 
         // ── Reply model: natural-language generation for all workflow outcomes ──
         ChatModel replyModel = OllamaChatModel.builder()
-                .baseUrl("http://localhost:11434")
-                .modelName("qwen3.5:9b")
+                .baseUrl(llmModelConfig.baseUrl())
+                .modelName(llmModelConfig.replyModel())
                 .temperature(0.4)
                 .think(false)
                 .listeners(List.of(new TokenUsageLoggingListener("reply")))

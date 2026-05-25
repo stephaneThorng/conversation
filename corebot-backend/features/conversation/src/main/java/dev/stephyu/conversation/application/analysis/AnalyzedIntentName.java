@@ -7,6 +7,7 @@ import org.jspecify.annotations.Nullable;
 
 @NullMarked
 public enum AnalyzedIntentName {
+    NONE,
     RESERVATION_CREATE,
     RESERVATION_CHECK,
     RESERVATION_CANCEL,
@@ -21,6 +22,7 @@ public enum AnalyzedIntentName {
             return UNKNOWN;
         }
         return switch (normalize(rawValue)) {
+            case "none", "nointent", "noaction", "social", "general" -> NONE;
             case "reservationcreate" -> RESERVATION_CREATE;
             case "reservationcheck" -> RESERVATION_CHECK;
             case "reservationcancel" -> RESERVATION_CANCEL;

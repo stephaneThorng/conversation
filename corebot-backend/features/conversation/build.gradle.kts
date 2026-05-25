@@ -30,6 +30,7 @@ dependencies {
 
     testImplementation("org.testcontainers:junit-jupiter:1.21.0")
     testImplementation("org.testcontainers:postgresql:1.21.0")
+    testImplementation("dev.langchain4j:langchain4j-ollama:1.15.0")
 }
 
 jooq {

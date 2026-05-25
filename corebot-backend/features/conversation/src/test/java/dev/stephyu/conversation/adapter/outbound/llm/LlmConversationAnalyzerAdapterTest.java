@@ -166,6 +166,21 @@ class LlmConversationAnalyzerAdapterTest {
     }
 
     @Test
+    void keepsNoneIntentForSocialMessage() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.NONE,
+                        false, false, false,
+                        null)));
+
+        var analysis = adapter.analyze(request("merci", null, List.of(), false));
+
+        assertEquals(AnalyzedIntentName.NONE, analysis.firstIntent().orElseThrow().name());
+        assertTrue(analysis.firstIntent().orElseThrow().entities().isEmpty());
+    }
+
+    @Test
     void rejectsReservationDetailsAbsentFromLatestMessage() {
         LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
                 new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
@@ -313,6 +328,27 @@ class LlmConversationAnalyzerAdapterTest {
                 ConversationAnalyzerLlm.ConversationAnalysisPayload.class));
 
         assertEquals(AnalyzedIntentName.UNKNOWN, payload.mainIntent());
+    }
+
+    @Test
+    void noneRawIntentValueDeserializesCorrectly() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        String json = """
+                {
+                  "language": "fr",
+                  "mainIntent": "NONE",
+                  "isAffirmative": false,
+                  "isNegative": false,
+                  "isCancel": false,
+                  "reservationDetails": null
+                }
+                """;
+
+        ConversationAnalyzerLlm.ConversationAnalysisPayload payload = objectMapper.readValue(
+                json,
+                ConversationAnalyzerLlm.ConversationAnalysisPayload.class);
+
+        assertEquals(AnalyzedIntentName.NONE, payload.mainIntent());
     }
 
     @Test

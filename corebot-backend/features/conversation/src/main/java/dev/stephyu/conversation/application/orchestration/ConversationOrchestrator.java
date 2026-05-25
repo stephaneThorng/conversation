@@ -141,6 +141,15 @@ public final class ConversationOrchestrator {
             dev.stephyu.conversation.application.analysis.ConversationAnalysis analysis,
             String language,
             ResponseTone responseTone) {
+        if (hasIntentNamed(analysis.intents(), AnalyzedIntentName.NONE)) {
+            String reply = conversationReplyPort.reply(
+                    session.sessionId().value(),
+                    language,
+                    new ConversationReplyPort.ReplyContext(ConversationReplyPort.ReplyIntent.GENERAL, Map.of()),
+                    message);
+            return withReply(session, session.state(), reply);
+        }
+
         Optional<WorkflowSelection> workflowSelection = selectWorkflow(analysis.intents());
         if (workflowSelection.isEmpty()) {
             String reply = conversationReplyPort.reply(

@@ -22,6 +22,7 @@ public interface ConversationAnalyzerLlm {
             Reservation intent phrases like "reserve", "book", "booking", "reservation", "table for", and "reserver" mean RESERVATION_CREATE even if no slot value is present yet.
             Reservation lookup phrases mean RESERVATION_CHECK.
             Reservation cancellation phrases mean RESERVATION_CANCEL only when the user explicitly refers to an existing reservation.
+            Social messages like greetings, thanks, farewells, or polite acknowledgements with no business action mean NONE.
             Pure confirmation means mainIntent=UNKNOWN with isAffirmative=true.
             Pure refusal without new data means mainIntent=UNKNOWN with isNegative=true.
             Use CANCEL only when the user wants to abort the current in-progress workflow.
@@ -48,6 +49,9 @@ public interface ConversationAnalyzerLlm {
             activeWorkflowType: RESERVATION_CREATE
             message: "je prefere le 26 mai"
             output: {"language":"fr","mainIntent":"RESERVATION_CREATE","isAffirmative":false,"isNegative":false,"isCancel":false,"reservationDetails":{"date":"le 26 mai"}}
+
+            message: "merci"
+            output: {"language":"fr","mainIntent":"NONE","isAffirmative":false,"isNegative":false,"isCancel":false}
 
             message: "oui c'est parfait"
             output: {"language":"fr","mainIntent":"UNKNOWN","isAffirmative":true,"isNegative":false,"isCancel":false}
@@ -119,10 +123,12 @@ public interface ConversationAnalyzerLlm {
                     Use RESERVATION_CREATE for any booking action or reservation slot correction.
                     Use RESERVATION_CHECK when the user wants to look up an existing reservation.
                     Use RESERVATION_CANCEL when the user wants to cancel an existing reservation.
+                    Use NONE when the message is understood but has no actionable restaurant workflow intent,
+                    for example greetings, thanks, farewells, or polite acknowledgements.
                     Use ASK_MENU when the user asks about a menu or menus.
                     Use ASK_MENU_ITEM when the user asks about dishes or menu items.
                     Use CANCEL when the user wants to abort the current in-progress workflow.
-                    Use UNKNOWN for pure confirmations, pure refusals, or unrecognized messages.
+                    Use UNKNOWN for pure confirmations, pure refusals, or genuinely unrecognized messages.
                     Do not use AFFIRMATIVE or NEGATIVE here; use the boolean flags instead.
                     When the message is short or ambiguous and activeWorkflowType is not "none",
                     use activeWorkflowType as the intent.

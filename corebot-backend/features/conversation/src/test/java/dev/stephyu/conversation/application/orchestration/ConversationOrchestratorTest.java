@@ -71,6 +71,19 @@ class ConversationOrchestratorTest {
     }
 
     @Test
+    void routesNoneIntentToGeneralReply() {
+        ConversationOrchestrator orchestrator = orchestrator(
+                request -> new ConversationAnalysis("fr", List.of(new AnalyzedIntent(AnalyzedIntentName.NONE, List.of()))));
+
+        var result = orchestrator.orchestrate(
+                new ConversationSession(SessionId.of("session-1"), new ConversationState(EstablishmentId.of("est-1"), null)),
+                "merci");
+
+        assertEquals("GENERAL", result.reply());
+        assertFalse(result.session().state().hasActiveWorkflow());
+    }
+
+    @Test
     void startsReservationWorkflowFromSingleIntent() {
         ConversationOrchestrator orchestrator = orchestrator(
                 request -> new ConversationAnalysis("fr", List.of(new AnalyzedIntent(AnalyzedIntentName.RESERVATION_CREATE, List.of()))));
