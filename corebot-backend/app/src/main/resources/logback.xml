@@ -16,8 +16,14 @@
 
     <logger name="org.eclipse.jetty" level="INFO" />
     <logger name="io.javalin" level="ERROR" />
-    <logger name="dev.stephyu.conversation.adapter.outbound.llm" level="DEBUG" />
-    <logger name="dev.stephyu.conversation.application.orchestration" level="DEBUG" />
+    <logger name="dev.stephyu.conversation.adapter.outbound.llm" level="INFO" />
+    <logger name="dev.stephyu.conversation.adapter.outbound.llm.LlmConversationAnalyzerAdapter" level="DEBUG" />
+    <logger name="dev.stephyu.conversation.adapter.outbound.llm.LlmConversationReplyAdapter" level="DEBUG" />
+    <logger name="dev.stephyu.conversation.adapter.outbound.llm.LlmMenuAssistantAdapter" level="DEBUG" />
+    <logger name="dev.stephyu.conversation.adapter.outbound.llm.MenuAssistantLlmFactory" level="DEBUG" />
+    <logger name="dev.stephyu.conversation.adapter.outbound.llm.MenuSearchToolProvider" level="DEBUG" />
+    <logger name="dev.stephyu.conversation.adapter.outbound.llm.TokenUsageLoggingListener" level="DEBUG" />
+    <logger name="dev.stephyu.conversation.application.orchestration" level="INFO" />
 
     <root level="INFO">
         <appender-ref ref="STDOUT" />

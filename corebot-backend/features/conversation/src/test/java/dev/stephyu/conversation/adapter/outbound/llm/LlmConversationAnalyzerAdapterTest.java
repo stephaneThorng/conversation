@@ -17,8 +17,8 @@ import dev.stephyu.conversation.domain.SessionId;
 import dev.stephyu.conversation.domain.workflow.WorkflowType;
 import java.time.LocalDate;
 import java.util.List;
-
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 @NullMarked
@@ -31,10 +31,9 @@ class LlmConversationAnalyzerAdapterTest {
                         "en",
                         AnalyzedIntentName.RESERVATION_CREATE,
                         false, false, false,
-                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Martin", null, null, null, null),
-                         null)));
+                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Martin", null, null, null, null))));
 
-        var analysis = adapter.analyze(request());
+        var analysis = adapter.analyze(request("Martin"));
 
         assertEquals(AnalyzedIntentName.RESERVATION_CREATE, analysis.firstIntent().orElseThrow().name());
         assertEquals(AnalyzedEntityType.RESERVATION_NAME, analysis.firstIntent().orElseThrow().entities().getFirst().type());
@@ -48,9 +47,8 @@ class LlmConversationAnalyzerAdapterTest {
                         "fr",
                         AnalyzedIntentName.RESERVATION_CREATE,
                         false, false, false,
-                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Stephane", "5", "lundi prochain", "20h30", null),
-                         null)));
-        var analysis = adapter.analyze(request());
+                         new ConversationAnalyzerLlm.ReservationDetailsPayload("Stephane", "5", "lundi prochain", "20h30", null))));
+        var analysis = adapter.analyze(request("Stephane 5 lundi prochain 20h30"));
         var entities = analysis.firstIntent().orElseThrow().entities();
 
         assertEquals(4, entities.size());
@@ -71,7 +69,6 @@ class LlmConversationAnalyzerAdapterTest {
                         "fr",
                         AnalyzedIntentName.RESERVATION_CREATE,
                         false, false, false,
-                        null,
                         null)));
 
         var analysis = adapter.analyze(request());
@@ -86,7 +83,6 @@ class LlmConversationAnalyzerAdapterTest {
                         "fr",
                         AnalyzedIntentName.UNKNOWN,
                         true, false, false,
-                        null,
                         null)));
 
         var analysis = adapter.analyze(request());
@@ -104,7 +100,6 @@ class LlmConversationAnalyzerAdapterTest {
                         "fr",
                         AnalyzedIntentName.UNKNOWN,
                         false, true, false,
-                        null,
                         null)));
 
         var analysis = adapter.analyze(request());
@@ -127,7 +122,126 @@ class LlmConversationAnalyzerAdapterTest {
         assertEquals("RESERVATION_CREATE", analyzer.activeWorkflowType);
         assertEquals("reservation_name:TEXT=\"Martin\"", analyzer.collectedData);
         assertEquals("date, time", analyzer.missingRequiredSlots);
+        assertTrue(analyzer.analysisHints.contains("Active workflow: RESERVATION_CREATE."));
+        assertTrue(analyzer.analysisHints.contains("Do not reuse collectedData or history as extracted values."));
         assertEquals("en", analyzer.language);
+    }
+
+    @Test
+    void noWorkflowHintsKeepBareCancelAmbiguous() {
+        RecordingAnalyzer analyzer = new RecordingAnalyzer();
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(analyzer);
+
+        adapter.analyze(request("annuler", null, List.of(), false));
+
+        assertEquals("none", analyzer.activeWorkflowType);
+        assertTrue(analyzer.analysisHints.contains("Use RESERVATION_CANCEL only if the user explicitly refers to an existing reservation."));
+        assertTrue(analyzer.analysisHints.contains("A bare cancel, annuler, or stop is ambiguous and should prefer UNKNOWN."));
+    }
+
+    @Test
+    void activeWorkflowHintsMapBareCancelToWorkflowAbort() {
+        RecordingAnalyzer analyzer = new RecordingAnalyzer();
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(analyzer);
+
+        adapter.analyze(request("annuler", WorkflowType.RESERVATION_CREATE, List.of("reservation_name"), false));
+
+        assertEquals("RESERVATION_CREATE", analyzer.activeWorkflowType);
+        assertTrue(analyzer.analysisHints.contains("A bare cancel, annuler, or stop means CANCEL for the current workflow."));
+    }
+
+    @Test
+    void menuIntentDoesNotProduceMenuEntities() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.ASK_MENU_ITEM,
+                        false, false, false,
+                        null)));
+
+        var analysis = adapter.analyze(request("quels plats vegan a moins de 10 euros ?"));
+
+        assertEquals(AnalyzedIntentName.ASK_MENU_ITEM, analysis.firstIntent().orElseThrow().name());
+        assertTrue(analysis.firstIntent().orElseThrow().entities().isEmpty());
+    }
+
+    @Test
+    void rejectsReservationDetailsAbsentFromLatestMessage() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.RESERVATION_CREATE,
+                        false, false, false,
+                        new ConversationAnalyzerLlm.ReservationDetailsPayload(null, null, "2026-05-25", null, null))));
+
+        var analysis = adapter.analyze(request("le 26 mai"));
+
+        assertTrue(analysis.firstIntent().orElseThrow().entities().isEmpty());
+    }
+
+    @Test
+    void keepsReservationDetailsPresentInLatestMessage() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.RESERVATION_CREATE,
+                        false, false, false,
+                        new ConversationAnalyzerLlm.ReservationDetailsPayload(null, null, "le 26 mai", null, null))));
+
+        var analysis = adapter.analyze(request("je prefere le 26 mai"));
+        var entities = analysis.firstIntent().orElseThrow().entities();
+
+        assertEquals(1, entities.size());
+        assertEquals(AnalyzedEntityType.DATE, entities.getFirst().type());
+        assertEquals("le 26 mai", entities.getFirst().rawValue());
+    }
+
+    @Test
+    void keepsReferenceNumberWhenPrefixWasStripped() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.RESERVATION_CHECK,
+                        false, false, false,
+                        new ConversationAnalyzerLlm.ReservationDetailsPayload(null, null, null, null, "1EBC495E"))));
+
+        var analysis = adapter.analyze(request("reference 1EBC495E"));
+        var entities = analysis.firstIntent().orElseThrow().entities();
+
+        assertEquals(1, entities.size());
+        assertEquals(AnalyzedEntityType.REFERENCE_NUMBER, entities.getFirst().type());
+        assertEquals("1EBC495E", entities.getFirst().rawValue());
+    }
+
+    @Test
+    void keepsReservationCancelIntentWhenNoReferenceYet() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.RESERVATION_CANCEL,
+                        false, false, false,
+                        null)));
+
+        var analysis = adapter.analyze(request("je souhaite annuler ma reservation", null, List.of(), false));
+
+        assertEquals(AnalyzedIntentName.RESERVATION_CANCEL, analysis.firstIntent().orElseThrow().name());
+        assertTrue(analysis.firstIntent().orElseThrow().entities().isEmpty());
+    }
+
+    @Test
+    void keepsUnknownIntentForBareCancelWhenNoWorkflow() {
+        LlmConversationAnalyzerAdapter adapter = new LlmConversationAnalyzerAdapter(
+                new FixedAnalyzer(new ConversationAnalyzerLlm.ConversationAnalysisPayload(
+                        "fr",
+                        AnalyzedIntentName.UNKNOWN,
+                        false, false, false,
+                        null)));
+
+        var analysis = adapter.analyze(request("annuler", null, List.of(), false));
+
+        assertEquals(AnalyzedIntentName.UNKNOWN, analysis.firstIntent().orElseThrow().name());
+        assertFalse(analysis.affirmative());
+        assertFalse(analysis.negative());
     }
 
     @Test
@@ -208,7 +322,6 @@ class LlmConversationAnalyzerAdapterTest {
                         null,
                         null,
                         false, false, false,
-                        null,
                         null)));
 
         var analysis = adapter.analyze(request());
@@ -228,14 +341,28 @@ class LlmConversationAnalyzerAdapterTest {
     }
 
     private static ConversationAnalysisRequest request() {
+        return request("hello");
+    }
+
+    private static ConversationAnalysisRequest request(String message) {
+        return request(message, WorkflowType.RESERVATION_CREATE, List.of("date", "time"), false);
+    }
+
+    private static ConversationAnalysisRequest request(
+            String message,
+            @Nullable WorkflowType workflowType,
+            List<String> missingRequiredSlots,
+            boolean awaitingConfirmation) {
         return new ConversationAnalysisRequest(
-                "hello",
+                message,
                 SessionId.of("session-1"),
                 EstablishmentId.of("est-1"),
-                WorkflowType.RESERVATION_CREATE,
-                List.of(new ConversationAnalysisRequest.CollectedValueSnapshot("reservation_name", "TEXT", "Martin")),
-                List.of("date", "time"),
-                false,
+                workflowType,
+                workflowType == null
+                        ? List.of()
+                        : List.of(new ConversationAnalysisRequest.CollectedValueSnapshot("reservation_name", "TEXT", "Martin")),
+                workflowType == null ? List.of() : missingRequiredSlots,
+                workflowType != null && awaitingConfirmation,
                 List.of(
                         new ConversationAnalysisRequest.ConversationTurnSnapshot(ConversationTurn.Role.USER, "hello"),
                         new ConversationAnalysisRequest.ConversationTurnSnapshot(ConversationTurn.Role.ASSISTANT, "Which date would you like?")),
@@ -251,12 +378,14 @@ class LlmConversationAnalyzerAdapterTest {
         private String activeWorkflowType = "";
         private String collectedData = "";
         private String missingRequiredSlots = "";
+        private String analysisHints = "";
         private String language = "";
 
         @Override
         public ConversationAnalysisPayload analyze(
                 String sessionId,
                 String message,
+                String analysisHints,
                 String recentTurns,
                 String activeWorkflowType,
                 String collectedData,
@@ -265,12 +394,13 @@ class LlmConversationAnalyzerAdapterTest {
                 String language) {
             this.sessionId = sessionId;
             this.message = message;
+            this.analysisHints = analysisHints;
             this.recentTurns = recentTurns;
             this.activeWorkflowType = activeWorkflowType;
             this.collectedData = collectedData;
             this.missingRequiredSlots = missingRequiredSlots;
             this.language = language;
-            return new ConversationAnalysisPayload("en", AnalyzedIntentName.UNKNOWN, false, false, false, null, null);
+            return new ConversationAnalysisPayload("en", AnalyzedIntentName.UNKNOWN, false, false, false, null);
         }
     }
 
@@ -285,6 +415,7 @@ class LlmConversationAnalyzerAdapterTest {
         public ConversationAnalysisPayload analyze(
                 String sessionId,
                 String message,
+                String analysisHints,
                 String recentTurns,
                 String activeWorkflowType,
                 String collectedData,

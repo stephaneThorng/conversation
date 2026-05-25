@@ -9,9 +9,9 @@ import dev.stephyu.conversation.domain.SessionId;
 import dev.stephyu.conversation.domain.workflow.Workflow;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class AskMenuHandlerTest {
@@ -19,8 +19,12 @@ final class AskMenuHandlerTest {
     @Test
     void shouldDelegateToMenuAssistantPort() {
         UUID establishmentId = UUID.fromString("6f7d2c8e-2f55-4e75-8c9a-2f31fdd9b101");
-        MenuAssistantPort menuAssistantPort = (sessionId, userMessage, language, estId) ->
-                "A La Carte: Starters - Green Papaya Salad";
+        AtomicReference<MenuAssistantPort.Scope> capturedScope = new AtomicReference<>();
+        MenuAssistantPort menuAssistantPort = (sessionId, userMessage, language, estId, scope) ->
+        {
+            capturedScope.set(scope);
+            return "A La Carte: Starters - Green Papaya Salad";
+        };
 
         AskMenuHandler handler = new AskMenuHandler(menuAssistantPort);
         Workflow workflow = handler.newWorkflow();
@@ -28,8 +32,9 @@ final class AskMenuHandlerTest {
         WorkflowPostProcessResult result = handler.onConfirmed(handlerInput(establishmentId), workflow);
 
         assertTrue(result.success());
-        assertTrue(result.arguments().get("results").contains("A La Carte"));
-        assertTrue(result.arguments().get("results").contains("Green Papaya Salad"));
+        assertTrue(result.directReply().contains("A La Carte"));
+        assertTrue(result.directReply().contains("Green Papaya Salad"));
+        assertTrue(capturedScope.get() == MenuAssistantPort.Scope.MENUS);
     }
 
     private static HandlerInput handlerInput(UUID establishmentId) {

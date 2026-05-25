@@ -4,20 +4,24 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
 import dev.stephyu.conversation.application.port.outbound.SearchMenuRepositoryPort;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.jspecify.annotations.NullMarked;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @NullMarked
 public final class MenuAssistantLlmFactory {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(MenuAssistantLlmFactory.class);
+
     private final ChatModel chatModel;
     private final SearchMenuRepositoryPort searchMenuRepositoryPort;
 
-    // One MenuSearchToolProvider per establishment — catalogue is read-only so it is safe to share
-    // across sessions. A second session for the same establishment reuses the already-loaded data.
+    // One provider per establishment/language pair so localized catalogue strings stay coherent.
     private final Map<String, MenuSearchToolProvider> toolCache = new ConcurrentHashMap<>();
 
     public MenuAssistantLlmFactory(ChatModel chatModel, SearchMenuRepositoryPort searchMenuRepositoryPort) {
@@ -26,18 +30,26 @@ public final class MenuAssistantLlmFactory {
     }
 
     public MenuAssistantLlm create(String sessionId, String establishmentId, String language) {
-        MenuSearchToolProvider tools = toolCache.computeIfAbsent(establishmentId, ignored ->
+        return AiServices.builder(MenuAssistantLlm.class)
+                .chatModel(chatModel)
+                .chatMemoryProvider(memoryId -> MessageWindowChatMemory.withMaxMessages(6))
+                .build();
+    }
+
+    public MenuSearchToolProvider tools(String sessionId, String establishmentId, String language) {
+        String cacheKey = establishmentId + "|" + language.toLowerCase(Locale.ROOT);
+        boolean cacheHit = toolCache.containsKey(cacheKey);
+        MenuSearchToolProvider tools = toolCache.computeIfAbsent(cacheKey, ignored ->
                 new MenuSearchToolProvider(
                         searchMenuRepositoryPort,
                         UUID.fromString(establishmentId),
                         language));
-        return AiServices.builder(MenuAssistantLlm.class)
-                .chatModel(chatModel)
-                .tools(tools)
-                .chatMemoryProvider(memoryId -> MessageWindowChatMemory.withMaxMessages(6))
-                .build();
+        LOGGER.debug(
+                "LLM menu tools: sessionId={}, establishmentId={}, language={}, cacheHit={}",
+                sessionId,
+                establishmentId,
+                language,
+                cacheHit);
+        return tools;
     }
 }
-
-
-

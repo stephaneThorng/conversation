@@ -22,9 +22,15 @@ public final class LlmConversationReplyAdapter implements ConversationReplyPort 
     @Override
     public String reply(String sessionId, String language, ReplyContext context, String userMessage) {
         String facts = formatFacts(context.facts());
-        LOGGER.debug("ConversationReply generating: sessionId={}, language={}, intent={}", sessionId, language, context.replyIntent());
+        LOGGER.debug(
+                "LLM reply input: sessionId={}, language={}, intent={}, facts={}, userMessage={}",
+                sessionId,
+                language,
+                context.replyIntent(),
+                quote(singleLine(facts, 240)),
+                quote(singleLine(userMessage, 180)));
         String reply = llm.generate(language, context.replyIntent().name(), facts, userMessage);
-        LOGGER.debug("ConversationReply generated: {}", reply);
+        LOGGER.debug("LLM reply output: sessionId={}, reply={}", sessionId, quote(singleLine(reply, 240)));
         return reply;
     }
 
@@ -35,6 +41,18 @@ public final class LlmConversationReplyAdapter implements ConversationReplyPort 
         return facts.entrySet().stream()
                 .map(e -> "- " + e.getKey() + ": " + e.getValue())
                 .collect(Collectors.joining("\n"));
+    }
+
+    private static String singleLine(String value, int maxChars) {
+        String compact = value.replace('\n', ' ').replace('\r', ' ').replaceAll("\\s+", " ").trim();
+        if (compact.length() <= maxChars) {
+            return compact;
+        }
+        return compact.substring(0, maxChars) + "...";
+    }
+
+    private static String quote(String value) {
+        return "\"" + value + "\"";
     }
 }
 

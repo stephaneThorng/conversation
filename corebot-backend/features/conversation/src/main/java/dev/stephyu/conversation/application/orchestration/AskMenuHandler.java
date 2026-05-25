@@ -43,7 +43,8 @@ public final class AskMenuHandler implements IntentHandler {
                 input.session().sessionId().value(),
                 input.message(),
                 input.language(),
-                establishmentId);
+                establishmentId,
+                MenuAssistantPort.Scope.MENUS);
         return WorkflowPostProcessResult.directReply(reply);
     }
 

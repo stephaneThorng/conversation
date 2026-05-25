@@ -50,7 +50,7 @@ public final class ConversationModule {
         // ── Analyzer model: structured JSON extraction (requires JSON schema support) ──
         OllamaChatModel analyzerModel = OllamaChatModel.builder()
                 .baseUrl("http://localhost:11434")
-                .modelName("qwen3.5:4b")
+                .modelName("qwen3.5:9b")
                 .supportedCapabilities(RESPONSE_FORMAT_JSON_SCHEMA)
                 .temperature(0.0)
                 .topP(0.1)
@@ -61,7 +61,7 @@ public final class ConversationModule {
         // ── Assistant model: tool calling + natural-language generation ──
         ChatModel assistantModel = OllamaChatModel.builder()
                 .baseUrl("http://localhost:11434")
-                .modelName("qwen3.5:4b")
+                .modelName("qwen3.5:9b")
                 .temperature(0.3)
                 .think(false)
                 .listeners(List.of(new TokenUsageLoggingListener("menu-assistant")))
@@ -70,11 +70,10 @@ public final class ConversationModule {
         // ── Reply model: natural-language generation for all workflow outcomes ──
         ChatModel replyModel = OllamaChatModel.builder()
                 .baseUrl("http://localhost:11434")
-                .modelName("qwen3.5:4b")
+                .modelName("qwen3.5:9b")
                 .temperature(0.4)
                 .think(false)
                 .listeners(List.of(new TokenUsageLoggingListener("reply")))
-                .logRequests(true)
                 .build();
 
         ConversationStateRepositoryPort conversationStateRepository = new InMemoryConversationStateRepository();

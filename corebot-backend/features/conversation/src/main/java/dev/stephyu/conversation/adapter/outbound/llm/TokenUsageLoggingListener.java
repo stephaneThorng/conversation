@@ -29,7 +29,7 @@ public final class TokenUsageLoggingListener implements ChatModelListener {
     public void onResponse(ChatModelResponseContext responseContext) {
         TokenUsage usage = responseContext.chatResponse().metadata().tokenUsage();
         if (usage != null) {
-            LOGGER.debug("LLM [{}] token usage: input={} output={} total={}",
+            LOGGER.debug("LLM {} tokens: input={} output={} total={}",
                     modelName,
                     usage.inputTokenCount(),
                     usage.outputTokenCount(),
