@@ -18,8 +18,7 @@ dependencies {
 
     // AI
     implementation("dev.langchain4j:langchain4j:1.15.0")
-    implementation("com.microsoft.recognizers.text.datetime:recognizers-text-date-time:1.0-SNAPSHOT")
-    implementation("com.microsoft.recognizers.text.number:recognizers-text-number:1.0-SNAPSHOT")
+    implementation("dev.langchain4j:langchain4j-open-ai:1.15.0")
     implementation("org.jooq:jooq:3.19.18")
     implementation("org.flywaydb:flyway-core:11.8.2")
     implementation("org.flywaydb:flyway-database-postgresql:11.8.2")

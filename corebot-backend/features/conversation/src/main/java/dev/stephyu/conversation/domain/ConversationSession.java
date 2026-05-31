@@ -10,8 +10,4 @@ public record ConversationSession(SessionId sessionId, ConversationState state) 
         Objects.requireNonNull(sessionId, "sessionId must not be null");
         Objects.requireNonNull(state, "state must not be null");
     }
-
-    public ConversationSession withState(ConversationState nextState) {
-        return new ConversationSession(sessionId, nextState);
-    }
 }
