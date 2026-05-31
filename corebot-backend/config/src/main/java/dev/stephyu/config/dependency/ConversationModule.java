@@ -4,7 +4,7 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.service.AiServices;
 import dev.stephyu.config.app.LlmModelConfig;
-import dev.stephyu.conversation.adapter.inbound.web.UserController;
+import dev.stephyu.conversation.adapter.inbound.web.SendMessageController;
 import dev.stephyu.conversation.adapter.outbound.llm.ConversationAgentAdapter;
 import dev.stephyu.conversation.adapter.outbound.llm.ConversationAgentLlm;
 import dev.stephyu.conversation.adapter.outbound.llm.MenuTools;
@@ -67,7 +67,7 @@ public final class ConversationModule {
                 conversationStateRepository,
                 conversationAgentPort);
 
-        UserController userController = new UserController(handleConversationUseCase);
-        return List.of(userController::register);
+        SendMessageController sendMessageController = new SendMessageController(handleConversationUseCase);
+        return List.of(sendMessageController::register);
     }
 }

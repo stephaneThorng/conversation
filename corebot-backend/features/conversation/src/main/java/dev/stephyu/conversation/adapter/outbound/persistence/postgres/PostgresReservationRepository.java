@@ -4,21 +4,24 @@ import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_CLOSURE;
 import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_OPENING_HOURS;
 import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION;
 import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION_CONFIG;
-import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION_TABLE;
+import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION_TABLE_MAP;
 import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_TABLE;
 
+import dev.stephyu.conversation.application.ReservationCapacityService;
+import dev.stephyu.conversation.application.ReservationCapacityService.ClosureRecord;
+import dev.stephyu.conversation.application.ReservationCapacityService.ExistingReservation;
+import dev.stephyu.conversation.application.ReservationCapacityService.OpeningSlot;
+import dev.stephyu.conversation.application.ReservationCapacityService.ReservationCapacityContext;
+import dev.stephyu.conversation.application.ReservationCapacityService.ReservationCapacityDecision;
+import dev.stephyu.conversation.application.ReservationCapacityService.ReservationConfig;
+import dev.stephyu.conversation.application.ReservationCapacityService.TableCandidate;
 import dev.stephyu.conversation.application.port.outbound.ReservationRepositoryPort;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.jooq.DSLContext;
 import org.jooq.Record4;
@@ -28,12 +31,16 @@ import org.jspecify.annotations.NullMarked;
 @NullMarked
 public final class PostgresReservationRepository implements ReservationRepositoryPort {
 
-    private static final Set<String> ACTIVE_STATUSES = Set.of("PENDING", "CONFIRMED");
-
     private final DSLContext dsl;
+    private final ReservationCapacityService capacityService;
 
     public PostgresReservationRepository(DSLContext dsl) {
+        this(dsl, new ReservationCapacityService());
+    }
+
+    public PostgresReservationRepository(DSLContext dsl, ReservationCapacityService capacityService) {
         this.dsl = Objects.requireNonNull(dsl, "dsl must not be null");
+        this.capacityService = Objects.requireNonNull(capacityService, "capacityService must not be null");
     }
 
     @Override
@@ -49,9 +56,9 @@ public final class PostgresReservationRepository implements ReservationRepositor
 
             return dsl.transactionResult(configuration -> {
                 DSLContext tx = DSL.using(configuration);
-                CapacityEvaluation evaluation = evaluateCapacity(tx, establishmentId, date, time, request.peopleCount());
-                if (!evaluation.result().canReserve()) {
-                    return ReservationResult.failure(evaluation.result().reason());
+                ReservationCapacityDecision decision = evaluateCapacity(tx, establishmentId, date, time, request.peopleCount());
+                if (!decision.result().canReserve()) {
+                    return ReservationResult.failure(decision.result().reason());
                 }
 
                 String referenceNumber = generateUniqueReference(tx);
@@ -64,15 +71,15 @@ public final class PostgresReservationRepository implements ReservationRepositor
                         .set(RESTAURANT_RESERVATION.RESERVATION_NAME, reservationName)
                         .set(RESTAURANT_RESERVATION.DATE, date)
                         .set(RESTAURANT_RESERVATION.TIME, time)
-                        .set(RESTAURANT_RESERVATION.DURATION_MINUTES, evaluation.result().reservationDurationMinutes())
+                        .set(RESTAURANT_RESERVATION.DURATION_MINUTES, decision.result().reservationDurationMinutes())
                         .set(RESTAURANT_RESERVATION.PEOPLE_COUNT, request.peopleCount())
                         .set(RESTAURANT_RESERVATION.STATUS, "PENDING")
                         .execute();
 
-                for (TableCandidate table : evaluation.selectedTables()) {
-                    tx.insertInto(RESTAURANT_RESERVATION_TABLE)
-                            .set(RESTAURANT_RESERVATION_TABLE.RESERVATION_ID, reservationId)
-                            .set(RESTAURANT_RESERVATION_TABLE.TABLE_ID, table.tableId())
+                for (TableCandidate table : decision.selectedTables()) {
+                    tx.insertInto(RESTAURANT_RESERVATION_TABLE_MAP)
+                            .set(RESTAURANT_RESERVATION_TABLE_MAP.RESERVATION_ID, reservationId)
+                            .set(RESTAURANT_RESERVATION_TABLE_MAP.TABLE_ID, table.tableId())
                             .execute();
                 }
                 return ReservationResult.success(referenceNumber);
@@ -159,112 +166,39 @@ public final class PostgresReservationRepository implements ReservationRepositor
         }
     }
 
-    private CapacityEvaluation evaluateCapacity(
+    private ReservationCapacityDecision evaluateCapacity(
             DSLContext tx, UUID establishmentId, LocalDate date, LocalTime time, int peopleCount) {
         ReservationConfig config = loadReservationConfig(tx, establishmentId).orElse(null);
         if (config == null) {
-            return failure(
-                    "reservation_config_missing",
-                    peopleCount,
-                    0,
-                    0,
-                    false,
-                    List.of("Reservation configuration is missing for this establishment."));
-        }
-        if (peopleCount < 1) {
-            return failure(
-                    "invalid_people_count",
-                    peopleCount,
-                    config.reservationDurationMinutes(),
-                    0,
-                    config.allowTableMerging(),
-                    List.of("Please request at least one guest."));
-        }
-
-        LocalDate today = LocalDate.now(ZoneId.systemDefault());
-        if (date.isBefore(today)) {
-            return failure(
-                    "date_in_past",
-                    peopleCount,
-                    config.reservationDurationMinutes(),
-                    0,
-                    config.allowTableMerging(),
-                    List.of("Please choose a future date."));
-        }
-        if (date.isAfter(today.plusDays(config.maxAdvanceDays()))) {
-            return failure(
-                    "too_far_in_advance",
-                    peopleCount,
-                    config.reservationDurationMinutes(),
-                    0,
-                    config.allowTableMerging(),
-                    List.of("Please choose a closer date."));
+            return new ReservationCapacityDecision(
+                    new ReservationRepositoryPort.ReservationCapacityResult(
+                            false,
+                            "reservation_config_missing",
+                            peopleCount,
+                            0,
+                            0,
+                            0,
+                            false,
+                            List.of(),
+                            List.of()),
+                    List.of());
         }
 
         Optional<ClosureRecord> closure = loadClosure(tx, establishmentId, date);
-        if (closure.isPresent()) {
-            return failure(
-                    "closed_exception",
-                    peopleCount,
-                    config.reservationDurationMinutes(),
-                    0,
-                    config.allowTableMerging(),
-                    List.of("The restaurant is closed on this date."));
-        }
-
         List<OpeningSlot> daySlots = loadOpeningSlots(tx, establishmentId, date.getDayOfWeek().getValue());
-        if (daySlots.isEmpty()) {
-            return failure(
-                    "closed_day",
-                    peopleCount,
-                    config.reservationDurationMinutes(),
-                    0,
-                    config.allowTableMerging(),
-                    List.of("The restaurant is closed on this day."));
-        }
+        List<TableCandidate> tables = loadTables(tx, establishmentId);
+        List<ExistingReservation> reservations = loadActiveReservations(tx, establishmentId, date);
 
-        LocalDateTime start = LocalDateTime.of(date, time);
-        LocalDateTime end = start.plusMinutes(config.reservationDurationMinutes());
-        boolean withinHours = daySlots.stream().anyMatch(slot ->
-                !time.isBefore(slot.openTime()) && !end.toLocalTime().isAfter(slot.closeTime()));
-        if (!withinHours) {
-            return failure(
-                    "outside_opening_hours",
-                    peopleCount,
-                    config.reservationDurationMinutes(),
-                    0,
-                    config.allowTableMerging(),
-                    formatSuggestions(daySlots));
-        }
-
-        List<TableCandidate> availableTables = loadAvailableTables(
-                tx, establishmentId, date, time, config.reservationDurationMinutes());
-        List<TableCandidate> selectedTables = selectTables(availableTables, peopleCount, config.allowTableMerging());
-        if (selectedTables.isEmpty()) {
-            int availableSeats = availableTables.stream().mapToInt(TableCandidate::seatCount).sum();
-            String reason = config.allowTableMerging() ? "no_capacity"
-                    : (availableSeats >= peopleCount ? "needs_merging" : "no_capacity");
-            List<String> alternatives = new ArrayList<>();
-            alternatives.add("Try another time within the opening hours.");
-            if (!config.allowTableMerging() && availableSeats >= peopleCount) {
-                alternatives.add("This group fits only if table merging is enabled.");
-            }
-            return failure(
-                    reason,
-                    peopleCount,
-                    config.reservationDurationMinutes(),
-                    availableSeats,
-                    config.allowTableMerging(),
-                    alternatives);
-        }
-
-        int availableSeats = selectedTables.stream().mapToInt(TableCandidate::seatCount).sum();
-        return success(
+        return capacityService.evaluate(new ReservationCapacityContext(
+                establishmentId,
+                date,
+                time,
                 peopleCount,
-                config.reservationDurationMinutes(),
-                availableSeats,
-                selectedTables,
-                config.allowTableMerging());
+                config,
+                closure.orElse(null),
+                daySlots,
+                tables,
+                reservations));
     }
 
     private Optional<ReservationConfig> loadReservationConfig(DSLContext tx, UUID establishmentId) {
@@ -301,105 +235,47 @@ public final class PostgresReservationRepository implements ReservationRepositor
                 .where(RESTAURANT_OPENING_HOURS.ESTABLISHMENT_ID.eq(establishmentId))
                 .and(RESTAURANT_OPENING_HOURS.DAY_OF_WEEK.eq((short) dayOfWeek))
                 .and(RESTAURANT_OPENING_HOURS.ACTIVE.isTrue())
-                .orderBy(RESTAURANT_OPENING_HOURS.OPEN_TIME.asc(), RESTAURANT_OPENING_HOURS.CLOSE_TIME.asc())
+                .orderBy(RESTAURANT_OPENING_HOURS.OPEN_TIME.asc(),
+                        RESTAURANT_OPENING_HOURS.CLOSE_TIME.asc())
                 .fetch(record -> new OpeningSlot(
                         record.get(RESTAURANT_OPENING_HOURS.OPEN_TIME),
                         record.get(RESTAURANT_OPENING_HOURS.CLOSE_TIME)));
     }
 
-    private List<TableCandidate> loadAvailableTables(
-            DSLContext tx, UUID establishmentId, LocalDate date, LocalTime time, int durationMinutes) {
-        LocalDateTime start = LocalDateTime.of(date, time);
-        LocalDateTime end = start.plusMinutes(durationMinutes);
-        Set<UUID> occupiedTableIds = loadOccupiedTableIds(tx, establishmentId, date, start, end);
-
+    private List<TableCandidate> loadTables(DSLContext tx, UUID establishmentId) {
         return tx.select(
                         RESTAURANT_TABLE.ID,
                         RESTAURANT_TABLE.TABLE_NUMBER,
-                        RESTAURANT_TABLE.SEAT_COUNT)
+                        RESTAURANT_TABLE.SEAT_COUNT,
+                        RESTAURANT_TABLE.ACTIVE)
                 .from(RESTAURANT_TABLE)
                 .where(RESTAURANT_TABLE.ESTABLISHMENT_ID.eq(establishmentId))
-                .and(RESTAURANT_TABLE.ACTIVE.isTrue())
-                .orderBy(RESTAURANT_TABLE.SEAT_COUNT.asc(), RESTAURANT_TABLE.TABLE_NUMBER.asc())
                 .fetch(record -> new TableCandidate(
                         record.get(RESTAURANT_TABLE.ID),
                         record.get(RESTAURANT_TABLE.TABLE_NUMBER),
-                        record.get(RESTAURANT_TABLE.SEAT_COUNT)))
-                .stream()
-                .filter(table -> !occupiedTableIds.contains(table.tableId()))
-                .toList();
+                        record.get(RESTAURANT_TABLE.SEAT_COUNT),
+                        Boolean.TRUE.equals(record.get(RESTAURANT_TABLE.ACTIVE))));
     }
 
-    private Set<UUID> loadOccupiedTableIds(
-            DSLContext tx, UUID establishmentId, LocalDate date, LocalDateTime start, LocalDateTime end) {
-        Set<UUID> occupiedTableIds = new HashSet<>();
-        List<Record4<UUID, LocalTime, Integer, String>> reservations = tx.select(
-                        RESTAURANT_RESERVATION_TABLE.TABLE_ID,
+    private List<ExistingReservation> loadActiveReservations(DSLContext tx, UUID establishmentId, LocalDate date) {
+        return tx.select(
+                        RESTAURANT_RESERVATION_TABLE_MAP.TABLE_ID,
+                        RESTAURANT_RESERVATION.DATE,
                         RESTAURANT_RESERVATION.TIME,
                         RESTAURANT_RESERVATION.DURATION_MINUTES,
                         RESTAURANT_RESERVATION.STATUS)
                 .from(RESTAURANT_RESERVATION)
-                .join(RESTAURANT_RESERVATION_TABLE)
-                .on(RESTAURANT_RESERVATION_TABLE.RESERVATION_ID.eq(RESTAURANT_RESERVATION.ID))
+                .join(RESTAURANT_RESERVATION_TABLE_MAP)
+                .on(RESTAURANT_RESERVATION_TABLE_MAP.RESERVATION_ID.eq(RESTAURANT_RESERVATION.ID))
                 .where(RESTAURANT_RESERVATION.ESTABLISHMENT_ID.eq(establishmentId))
                 .and(RESTAURANT_RESERVATION.DATE.eq(date))
-                .and(RESTAURANT_RESERVATION.STATUS.in(ACTIVE_STATUSES))
-                .fetch();
-
-        for (Record4<UUID, LocalTime, Integer, String> reservation : reservations) {
-            LocalDateTime existingStart = LocalDateTime.of(date, reservation.value2());
-            LocalDateTime existingEnd = existingStart.plusMinutes(reservation.value3());
-            if (existingStart.isBefore(end) && start.isBefore(existingEnd)) {
-                occupiedTableIds.add(reservation.value1());
-            }
-        }
-        return occupiedTableIds;
-    }
-
-    private List<TableCandidate> selectTables(List<TableCandidate> availableTables, int peopleCount, boolean allowMerging) {
-        if (availableTables.isEmpty()) {
-            return List.of();
-        }
-        if (!allowMerging) {
-            return availableTables.stream()
-                    .filter(table -> table.seatCount() >= peopleCount)
-                    .findFirst()
-                    .map(List::of)
-                    .orElse(List.of());
-        }
-
-        BestCombination bestCombination = new BestCombination();
-        searchCombinations(availableTables, 0, new ArrayList<>(), 0, peopleCount, bestCombination);
-        return bestCombination.tables().orElse(List.of());
-    }
-
-    private void searchCombinations(
-            List<TableCandidate> availableTables,
-            int startIndex,
-            List<TableCandidate> currentSelection,
-            int currentSeats,
-            int targetSeats,
-            BestCombination bestCombination) {
-        if (currentSeats >= targetSeats) {
-            bestCombination.consider(currentSelection, currentSeats);
-            return;
-        }
-        if (currentSelection.size() == 3) {
-            return;
-        }
-
-        for (int index = startIndex; index < availableTables.size(); index++) {
-            TableCandidate candidate = availableTables.get(index);
-            currentSelection.add(candidate);
-            searchCombinations(
-                    availableTables,
-                    index + 1,
-                    currentSelection,
-                    currentSeats + candidate.seatCount(),
-                    targetSeats,
-                    bestCombination);
-            currentSelection.remove(currentSelection.size() - 1);
-        }
+                .and(RESTAURANT_RESERVATION.STATUS.in("PENDING", "CONFIRMED"))
+                .fetch(record -> new ExistingReservation(
+                        record.get(RESTAURANT_RESERVATION_TABLE_MAP.TABLE_ID),
+                        record.get(RESTAURANT_RESERVATION.DATE),
+                        record.get(RESTAURANT_RESERVATION.TIME),
+                        record.get(RESTAURANT_RESERVATION.DURATION_MINUTES),
+                        true));
     }
 
     private String generateUniqueReference(DSLContext tx) {
@@ -413,57 +289,6 @@ public final class PostgresReservationRepository implements ReservationRepositor
             }
         }
         throw new IllegalStateException("Unable to generate a unique reservation reference");
-    }
-
-    private CapacityEvaluation success(
-            int requestedPeopleCount,
-            int reservationDurationMinutes,
-            int availableSeats,
-            List<TableCandidate> selectedTables,
-            boolean canMergeTables) {
-        List<String> selectedTableNumbers = selectedTables.stream()
-                .map(TableCandidate::tableNumber)
-                .toList();
-        return new CapacityEvaluation(new ReservationCapacityResult(
-                true,
-                "ok",
-                requestedPeopleCount,
-                reservationDurationMinutes,
-                availableSeats,
-                selectedTables.size(),
-                canMergeTables,
-                selectedTableNumbers,
-                List.of()), selectedTables);
-    }
-
-    private CapacityEvaluation failure(
-            String reason,
-            int requestedPeopleCount,
-            int reservationDurationMinutes,
-            int availableSeats,
-            boolean canMergeTables,
-            List<String> suggestedAlternatives) {
-        return new CapacityEvaluation(new ReservationCapacityResult(
-                false,
-                reason,
-                requestedPeopleCount,
-                reservationDurationMinutes,
-                availableSeats,
-                0,
-                canMergeTables,
-                List.of(),
-                List.copyOf(suggestedAlternatives)), List.of());
-    }
-
-    private static List<String> formatSuggestions(List<OpeningSlot> daySlots) {
-        if (daySlots.isEmpty()) {
-            return List.of("No opening hours are configured for this day.");
-        }
-        List<String> suggestions = new ArrayList<>();
-        for (OpeningSlot slot : daySlots) {
-            suggestions.add(slot.openTime() + "-" + slot.closeTime());
-        }
-        return List.copyOf(suggestions);
     }
 
     private static UUID parseUuid(String value) {
@@ -480,58 +305,5 @@ public final class PostgresReservationRepository implements ReservationRepositor
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
         return trimmed;
-    }
-
-    private record ReservationConfig(int reservationDurationMinutes, boolean allowTableMerging, int maxAdvanceDays) {
-    }
-
-    private record ClosureRecord(LocalDate closureDate, String reason) {
-    }
-
-    private record OpeningSlot(LocalTime openTime, LocalTime closeTime) {
-    }
-
-    private record TableCandidate(UUID tableId, String tableNumber, int seatCount) {
-    }
-
-    private record CapacityEvaluation(ReservationCapacityResult result, List<TableCandidate> selectedTables) {
-    }
-
-    private static final class BestCombination {
-        private List<TableCandidate> tables = List.of();
-        private int totalSeats = Integer.MAX_VALUE;
-
-        private void consider(List<TableCandidate> candidateTables, int seats) {
-            List<TableCandidate> snapshot = List.copyOf(candidateTables);
-            if (snapshot.isEmpty()) {
-                return;
-            }
-            if (tables.isEmpty()
-                    || seats < totalSeats
-                    || (seats == totalSeats && compareTables(snapshot, tables) < 0)) {
-                tables = snapshot;
-                totalSeats = seats;
-            }
-        }
-
-        private Optional<List<TableCandidate>> tables() {
-            return tables.isEmpty() ? Optional.empty() : Optional.of(tables);
-        }
-
-        private static int compareTables(List<TableCandidate> left, List<TableCandidate> right) {
-            int sizeComparison = Integer.compare(left.size(), right.size());
-            if (sizeComparison != 0) {
-                return sizeComparison;
-            }
-            List<String> leftNumbers = left.stream().map(TableCandidate::tableNumber).sorted().toList();
-            List<String> rightNumbers = right.stream().map(TableCandidate::tableNumber).sorted().toList();
-            for (int index = 0; index < Math.min(leftNumbers.size(), rightNumbers.size()); index++) {
-                int comparison = leftNumbers.get(index).compareTo(rightNumbers.get(index));
-                if (comparison != 0) {
-                    return comparison;
-                }
-            }
-            return Integer.compare(leftNumbers.size(), rightNumbers.size());
-        }
     }
 }

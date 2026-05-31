@@ -15,11 +15,11 @@ import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 @NullMarked
-public final class UserController {
+public final class SendMessageController {
 
     private final HandleConversationUseCase usecase;
 
-    public UserController(HandleConversationUseCase usecase) {
+    public SendMessageController(HandleConversationUseCase usecase) {
         this.usecase = usecase;
     }
 

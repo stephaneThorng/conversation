@@ -1,34 +1,30 @@
 package dev.stephyu.conversation.adapter.outbound.llm;
 
-import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.P;
+import dev.langchain4j.agent.tool.Tool;
 import dev.stephyu.conversation.application.port.outbound.SearchMenuRepositoryPort;
 import dev.stephyu.conversation.domain.menu.MenuItemSearchQuery;
 import dev.stephyu.conversation.domain.menu.MenuItemSearchResult;
 import dev.stephyu.conversation.domain.menu.MenuSearchQuery;
 import dev.stephyu.conversation.domain.menu.MenuSearchResult;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * LLM-callable tools for menu queries.
  * establishmentId and language are passed explicitly by the LLM so a single instance
  * serves all establishments. Results are cached per establishment/language pair (TTL 10 min).
- *
+ * <p>
  * Compact pipe-separated text format to minimize token consumption:
- *   items  → name | price | ingredients | allergens | dietary
- *   menus  → name [code] price\n  Section: item1, item2
+ * items  → name | price | ingredients | allergens | dietary
+ * menus  → name [code] price\n  Section: item1, item2
  */
 @NullMarked
 public final class MenuTools {
@@ -93,7 +89,7 @@ public final class MenuTools {
         StringBuilder sb = new StringBuilder();
         for (MenuSearchResult r : results) {
             sb.append(localized(r.nameTranslations(), language))
-              .append(" [").append(r.menuCode()).append("]");
+                    .append(" [").append(r.menuCode()).append("]");
             if (r.priceCents() != null) {
                 sb.append(" - ").append(formatPrice(r.priceCents(), r.currency()));
             }
@@ -114,8 +110,8 @@ public final class MenuTools {
         StringBuilder sb = new StringBuilder();
         for (MenuItemSearchResult r : results) {
             sb.append(localized(r.nameTranslations(), language))
-              .append(" | ").append(formatPrice(r.priceCents(), r.currency()))
-              .append(" | ").append(localized(r.ingredientNoteTranslations(), language));
+                    .append(" | ").append(formatPrice(r.priceCents(), r.currency()))
+                    .append(" | ").append(localized(r.ingredientNoteTranslations(), language));
             if (!r.allergenCodes().isEmpty()) {
                 sb.append(" | allergens:").append(String.join(",", r.allergenCodes()));
             }
@@ -158,7 +154,9 @@ public final class MenuTools {
             this.loadedAt = Instant.now();
         }
 
-        String value() { return value; }
+        String value() {
+            return value;
+        }
 
         boolean isExpired() {
             return Instant.now().isAfter(loadedAt.plus(CACHE_TTL));

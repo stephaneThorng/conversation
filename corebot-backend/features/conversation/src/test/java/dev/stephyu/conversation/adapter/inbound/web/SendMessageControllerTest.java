@@ -10,14 +10,14 @@ import dev.stephyu.conversation.domain.EstablishmentId;
 import dev.stephyu.conversation.domain.SessionId;
 import org.junit.jupiter.api.Test;
 
-class UserControllerTest {
+class SendMessageControllerTest {
 
     @Test
     void canBeInstantiatedWithFakeUseCase() {
         HandleConversationUseCase fakeUseCase =
             command -> new HandleConversationUseCase.HandleConversationResult(SessionId.of("session-1"), "reply");
 
-        UserController controller = new UserController(fakeUseCase);
+        SendMessageController controller = new SendMessageController(fakeUseCase);
 
         assertNotNull(controller);
     }

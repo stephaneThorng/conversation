@@ -2,7 +2,7 @@ package dev.stephyu.conversation.adapter.outbound.persistence.postgres;
 
 import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_CLOSURE;
 import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION;
-import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION_TABLE;
+import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION_TABLE_MAP;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.stephyu.conversation.application.port.outbound.ReservationRepositoryPort;
@@ -125,7 +125,7 @@ abstract class PostgresReservationRepositoryTestSupport {
         if (dsl == null) {
             return;
         }
-        dsl.deleteFrom(RESTAURANT_RESERVATION_TABLE).execute();
+        dsl.deleteFrom(RESTAURANT_RESERVATION_TABLE_MAP).execute();
         dsl.deleteFrom(RESTAURANT_RESERVATION).execute();
     }
 }

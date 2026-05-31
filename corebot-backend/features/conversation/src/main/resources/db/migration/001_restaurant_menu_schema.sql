@@ -205,7 +205,7 @@ create table restaurant_reservation (
 -- The applicative layer enforces the max 3 tables per merged reservation rule.
 -- ============================================================
 
-create table restaurant_reservation_table (
+create table restaurant_reservation_table_map (
     reservation_id uuid not null references restaurant_reservation(id) on delete cascade,
     table_id       uuid not null references restaurant_table(id) on delete cascade,
     primary key (reservation_id, table_id)
@@ -267,6 +267,5 @@ create index idx_restaurant_reservation_establishment_date_status
 create index idx_restaurant_reservation_channel_user
     on restaurant_reservation (channel_user_id);
 
-create index idx_restaurant_reservation_table_table_id
-    on restaurant_reservation_table (table_id);
-
+create index idx_restaurant_reservation_table_map_table_id
+    on restaurant_reservation_table_map (table_id);

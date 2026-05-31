@@ -7,6 +7,8 @@ import dev.stephyu.conversation.application.port.outbound.RestaurantAvailability
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.jooq.DSLContext;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
@@ -21,7 +24,10 @@ import org.jspecify.annotations.Nullable;
 @NullMarked
 public final class PostgresRestaurantAvailabilityRepository implements RestaurantAvailabilityRepositoryPort {
 
+    private static final Duration CACHE_TTL = Duration.ofMinutes(10);
+
     private final DSLContext dsl;
+    private final ConcurrentHashMap<UUID, CachedWeeklyOpeningHours> weeklyOpeningHoursCache = new ConcurrentHashMap<>();
 
     public PostgresRestaurantAvailabilityRepository(DSLContext dsl) {
         this.dsl = Objects.requireNonNull(dsl, "dsl must not be null");
@@ -54,6 +60,16 @@ public final class PostgresRestaurantAvailabilityRepository implements Restauran
     }
 
     private Map<Integer, List<OpeningSlot>> loadWeeklyOpeningHours(UUID establishmentId) {
+        CachedWeeklyOpeningHours cached = weeklyOpeningHoursCache.compute(establishmentId, (key, existing) -> {
+            if (existing != null && !existing.isExpired()) {
+                return existing;
+            }
+            return new CachedWeeklyOpeningHours(fetchWeeklyOpeningHours(establishmentId));
+        });
+        return cached.value();
+    }
+
+    private Map<Integer, List<OpeningSlot>> fetchWeeklyOpeningHours(UUID establishmentId) {
         Map<Integer, List<OpeningSlot>> openingHoursByDay = new LinkedHashMap<>();
         dsl.select(
                         RESTAURANT_OPENING_HOURS.DAY_OF_WEEK,
@@ -169,5 +185,15 @@ public final class PostgresRestaurantAvailabilityRepository implements Restauran
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
         return trimmed;
+    }
+
+    private record CachedWeeklyOpeningHours(Map<Integer, List<OpeningSlot>> value, Instant loadedAt) {
+        private CachedWeeklyOpeningHours(Map<Integer, List<OpeningSlot>> value) {
+            this(value, Instant.now());
+        }
+
+        private boolean isExpired() {
+            return Instant.now().isAfter(loadedAt.plus(CACHE_TTL));
+        }
     }
 }

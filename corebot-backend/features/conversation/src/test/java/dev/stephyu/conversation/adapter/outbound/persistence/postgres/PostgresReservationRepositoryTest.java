@@ -1,7 +1,7 @@
 package dev.stephyu.conversation.adapter.outbound.persistence.postgres;
 
 import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION;
-import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION_TABLE;
+import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_RESERVATION_TABLE_MAP;
 import static dev.stephyu.conversation.jooq.generated.Tables.RESTAURANT_TABLE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -62,11 +62,11 @@ final class PostgresReservationRepositoryTest extends PostgresReservationReposit
         assertTrue(created.success());
 
         List<String> tables = dsl.select(RESTAURANT_TABLE.TABLE_NUMBER)
-                .from(RESTAURANT_RESERVATION_TABLE)
+                .from(RESTAURANT_RESERVATION_TABLE_MAP)
                 .join(RESTAURANT_TABLE)
-                .on(RESTAURANT_TABLE.ID.eq(RESTAURANT_RESERVATION_TABLE.TABLE_ID))
+                .on(RESTAURANT_TABLE.ID.eq(RESTAURANT_RESERVATION_TABLE_MAP.TABLE_ID))
                 .join(RESTAURANT_RESERVATION)
-                .on(RESTAURANT_RESERVATION.ID.eq(RESTAURANT_RESERVATION_TABLE.RESERVATION_ID))
+                .on(RESTAURANT_RESERVATION.ID.eq(RESTAURANT_RESERVATION_TABLE_MAP.RESERVATION_ID))
                 .where(RESTAURANT_RESERVATION.REFERENCE_NUMBER.eq(created.referenceNumber()))
                 .orderBy(RESTAURANT_TABLE.TABLE_NUMBER.asc())
                 .fetch(record -> record.get(RESTAURANT_TABLE.TABLE_NUMBER));
@@ -233,9 +233,9 @@ final class PostgresReservationRepositoryTest extends PostgresReservationReposit
                     .set(RESTAURANT_RESERVATION.STATUS, "CONFIRMED")
                     .execute();
 
-            dsl.insertInto(RESTAURANT_RESERVATION_TABLE)
-                    .set(RESTAURANT_RESERVATION_TABLE.RESERVATION_ID, reservationId)
-                    .set(RESTAURANT_RESERVATION_TABLE.TABLE_ID, tableId)
+            dsl.insertInto(RESTAURANT_RESERVATION_TABLE_MAP)
+                    .set(RESTAURANT_RESERVATION_TABLE_MAP.RESERVATION_ID, reservationId)
+                    .set(RESTAURANT_RESERVATION_TABLE_MAP.TABLE_ID, tableId)
                     .execute();
         }
     }
