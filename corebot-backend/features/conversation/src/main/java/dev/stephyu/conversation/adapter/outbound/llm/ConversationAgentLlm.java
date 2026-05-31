@@ -48,6 +48,7 @@ public interface ConversationAgentLlm {
             - Use getAllMenus when the user asks about menus, set menus, or the overall menu structure.
             - Use getAllMenuItems when the user asks about dishes, ingredients, allergens, dietary restrictions, or prices.
             - Always pass the establishmentId and language from the context below.
+            - Always pass the channelUserId from the context to reservation tools.
             - Never invent menu items, prices, or allergens.
 
             ## Tool error handling
@@ -59,15 +60,17 @@ public interface ConversationAgentLlm {
     @UserMessage("""
             Current date: {{currentDate}} ({{currentDayOfWeek}})
             Establishment: {{establishmentId}}
-            Session: {{sessionId}}
+            Channel: {{channel}}
+            ChannelUserId: {{channelUserId}}
 
             User message:
             {{message}}
             """)
     String chat(
-            @MemoryId String sessionId,
+            @MemoryId String memoryKey,
             @V("establishmentId") String establishmentId,
-            @V("sessionId") String sessionId2,
+            @V("channel") String channel,
+            @V("channelUserId") String channelUserId,
             @V("currentDate") String currentDate,
             @V("currentDayOfWeek") String currentDayOfWeek,
             @V("message") String message);

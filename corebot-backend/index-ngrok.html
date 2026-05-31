@@ -183,6 +183,17 @@
     <script>
       const API_PATH = "/api/v1/conversation/send_message";
       const ESTABLISHMENT_ID = "6f7d2c8e-2f55-4e75-8c9a-2f31fdd9b101";
+      const CHANNEL = "WEB";
+      // For demo purposes, generate a stable pseudo-user ID per browser (stored in localStorage)
+      const CHANNEL_USER_ID = (() => {
+        const key = "corebot_channel_user_id";
+        let id = localStorage.getItem(key);
+        if (!id) {
+          id = "web_" + Math.random().toString(36).slice(2, 11);
+          localStorage.setItem(key, id);
+        }
+        return id;
+      })();
       const pageIsServedOverHttp =
         window.location.protocol === "http:" || window.location.protocol === "https:";
       const pageIsServedByBackend = pageIsServedOverHttp && window.location.port === "3000";
@@ -198,10 +209,21 @@
 
       let sessionId = null;
 
+      function renderMarkdown(text) {
+        return text
+          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/\*(.+?)\*/g, "<em>$1</em>")
+          .replace(/^- (.+)/gm, "• $1");
+      }
+
       function appendMessage(author, text) {
         const message = document.createElement("div");
         message.className = `message ${author}`;
-        message.textContent = text;
+        if (author === "bot") {
+          message.innerHTML = renderMarkdown(text);
+        } else {
+          message.textContent = text;
+        }
         thread.appendChild(message);
         thread.scrollTop = thread.scrollHeight;
       }
@@ -232,6 +254,8 @@
             },
             body: JSON.stringify({
               establishmentId: ESTABLISHMENT_ID,
+              channelUserId: CHANNEL_USER_ID,
+              channel: CHANNEL,
               message,
               sessionId: sessionId,
             }),

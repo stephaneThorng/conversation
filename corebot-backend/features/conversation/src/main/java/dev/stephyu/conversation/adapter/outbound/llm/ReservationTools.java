@@ -15,8 +15,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * LLM-callable tools for reservation side effects.
- * establishmentId and sessionId are passed explicitly by the LLM on every call
- * so a single instance serves all establishments and sessions.
+ * establishmentId and channelUserId are passed explicitly by the LLM on every call
+ * so a single instance serves all establishments and users.
+ * channelUserId ensures a user can only access their own reservations.
  */
 @NullMarked
 public final class ReservationTools {
@@ -33,26 +34,26 @@ public final class ReservationTools {
             "Returns the reservation reference number on success, or an error message on failure.")
     public String createReservation(
             @P("Establishment identifier (UUID) from the context") String establishmentId,
-            @P("Session identifier of the user making the reservation, from the context") String sessionId,
+            @P("Channel user identifier from the context (e.g. phone number or platform user ID)") String channelUserId,
             @P("Customer name for the reservation") String customerName,
             @P("Reservation date in ISO format: YYYY-MM-DD") String date,
             @P("Reservation time in ISO format: HH:mm") String time,
             @P("Number of people (positive integer)") int peopleCount) {
-        LOGGER.info("Tool createReservation: establishmentId={}, sessionId={}, customerName={}, date={}, time={}, peopleCount={}",
-                establishmentId, sessionId, customerName, date, time, peopleCount);
+        LOGGER.info("Tool createReservation: establishmentId={}, channelUserId={}, customerName={}, date={}, time={}, peopleCount={}",
+                establishmentId, channelUserId, customerName, date, time, peopleCount);
         try {
             LocalDate parsedDate = LocalDate.parse(date);
             LocalTime parsedTime = LocalTime.parse(time);
             var request = new ReservationRepositoryPort.CreateReservationRequest(
-                    customerName.trim(), parsedDate, parsedTime, peopleCount);
+                    channelUserId, customerName.trim(), parsedDate, parsedTime, peopleCount);
             ReservationRepositoryPort.ReservationResult result = reservationRepository.createReservation(request);
             if (result.success()) {
-                LOGGER.info("Tool createReservation: success, establishmentId={}, sessionId={}, reference={}",
-                        establishmentId, sessionId, result.referenceNumber());
+                LOGGER.info("Tool createReservation: success, establishmentId={}, channelUserId={}, reference={}",
+                        establishmentId, channelUserId, result.referenceNumber());
                 return "Reservation created successfully. Reference number: " + result.referenceNumber();
             }
-            LOGGER.warn("Tool createReservation: failure, establishmentId={}, sessionId={}, message={}",
-                    establishmentId, sessionId, result.message());
+            LOGGER.warn("Tool createReservation: failure, establishmentId={}, channelUserId={}, message={}",
+                    establishmentId, channelUserId, result.message());
             return "Failed to create reservation: " + result.message();
         } catch (DateTimeParseException e) {
             LOGGER.warn("Tool createReservation: invalid date/time format: date={}, time={}", date, time);
@@ -67,13 +68,13 @@ public final class ReservationTools {
             "Returns reservation details on success, or an error message if not found.")
     public String checkReservation(
             @P("Establishment identifier (UUID) from the context") String establishmentId,
-            @P("Session identifier of the user checking the reservation, from the context") String sessionId,
+            @P("Channel user identifier from the context (e.g. phone number or platform user ID)") String channelUserId,
             @P("Reservation reference number (e.g. A1B2C3D4)") String referenceNumber) {
-        LOGGER.info("Tool checkReservation: establishmentId={}, sessionId={}, referenceNumber={}",
-                establishmentId, sessionId, referenceNumber);
+        LOGGER.info("Tool checkReservation: establishmentId={}, channelUserId={}, referenceNumber={}",
+                establishmentId, channelUserId, referenceNumber);
         try {
             Optional<ReservationRepositoryPort.ReservationSummary> found =
-                    reservationRepository.findReservation(referenceNumber.trim().toUpperCase(Locale.ROOT));
+                    reservationRepository.findReservation(referenceNumber.trim().toUpperCase(Locale.ROOT), channelUserId);
             if (found.isEmpty()) {
                 return "No reservation found with reference number: " + referenceNumber;
             }
@@ -94,20 +95,20 @@ public final class ReservationTools {
             "Returns a success message or an error if the reservation was not found.")
     public String cancelReservation(
             @P("Establishment identifier (UUID) from the context") String establishmentId,
-            @P("Session identifier of the user cancelling the reservation, from the context") String sessionId,
+            @P("Channel user identifier from the context (e.g. phone number or platform user ID)") String channelUserId,
             @P("Reservation reference number to cancel (e.g. A1B2C3D4)") String referenceNumber) {
-        LOGGER.info("Tool cancelReservation: establishmentId={}, sessionId={}, referenceNumber={}",
-                establishmentId, sessionId, referenceNumber);
+        LOGGER.info("Tool cancelReservation: establishmentId={}, channelUserId={}, referenceNumber={}",
+                establishmentId, channelUserId, referenceNumber);
         try {
             ReservationRepositoryPort.ReservationResult result =
-                    reservationRepository.cancelReservation(referenceNumber.trim().toUpperCase(Locale.ROOT));
+                    reservationRepository.cancelReservation(referenceNumber.trim().toUpperCase(Locale.ROOT), channelUserId);
             if (result.success()) {
-                LOGGER.info("Tool cancelReservation: success, establishmentId={}, sessionId={}, reference={}",
-                        establishmentId, sessionId, result.referenceNumber());
+                LOGGER.info("Tool cancelReservation: success, establishmentId={}, channelUserId={}, reference={}",
+                        establishmentId, channelUserId, result.referenceNumber());
                 return "Reservation " + result.referenceNumber() + " has been successfully cancelled.";
             }
-            LOGGER.warn("Tool cancelReservation: failure, establishmentId={}, sessionId={}, message={}",
-                    establishmentId, sessionId, result.message());
+            LOGGER.warn("Tool cancelReservation: failure, establishmentId={}, channelUserId={}, message={}",
+                    establishmentId, channelUserId, result.message());
             return "Failed to cancel reservation: " + result.message();
         } catch (Exception e) {
             LOGGER.error("Tool cancelReservation: unexpected error", e);

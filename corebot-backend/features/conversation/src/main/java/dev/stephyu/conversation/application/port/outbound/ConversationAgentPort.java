@@ -1,18 +1,16 @@
 package dev.stephyu.conversation.application.port.outbound;
 
+import dev.stephyu.conversation.domain.Channel;
 import org.jspecify.annotations.NullMarked;
 
 @NullMarked
 public interface ConversationAgentPort {
 
     /**
-     * Sends a user message to the conversation agent and returns the assistant reply.
-     *
-     * @param sessionId       unique session identifier (used as memory key)
+     * @param channelUserId stable user identifier from the messaging channel (phone, platform ID...)
+     * @param channel       the messaging channel used
      * @param establishmentId the restaurant/establishment identifier
-     * @param message         the raw user message
-     * @return the assistant reply as plain text
+     * @param message       the raw user message
      */
-    String chat(String sessionId, String establishmentId, String message);
+    String chat(String channelUserId, Channel channel, String establishmentId, String message);
 }
-

@@ -29,21 +29,21 @@ public class HandleConversationService implements HandleConversationUseCase {
     public HandleConversationResult handle(HandleConversationCommand command) {
         ConversationSession session = loadSession(command.sessionId(), command.establishmentId());
         LOGGER.debug(
-                "Conversation request received: sessionId={}, establishmentId={}, message={}",
+                "Conversation request received: sessionId={}, channelUserId={}, channel={}, establishmentId={}, message={}",
                 command.sessionId().value(),
+                command.channelUserId(),
+                command.channel(),
                 command.establishmentId().value(),
                 command.message());
 
         String reply = conversationAgentPort.chat(
-                command.sessionId().value(),
+                command.channelUserId(),
+                command.channel(),
                 command.establishmentId().value(),
                 command.message());
 
         saveSession(session);
-        LOGGER.debug(
-                "Conversation request handled: sessionId={}, reply={}",
-                command.sessionId().value(),
-                reply);
+        LOGGER.debug("Conversation request handled: channelUserId={}, reply={}", command.channelUserId(), reply);
         return new HandleConversationResult(command.sessionId(), reply);
     }
 

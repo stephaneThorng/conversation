@@ -1,6 +1,7 @@
 package dev.stephyu.conversation.adapter.outbound.llm;
 
 import dev.stephyu.conversation.application.port.outbound.ConversationAgentPort;
+import dev.stephyu.conversation.domain.Channel;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
@@ -23,17 +24,20 @@ public final class ConversationAgentAdapter implements ConversationAgentPort {
     }
 
     @Override
-    public String chat(String sessionId, String establishmentId, String message) {
+    public String chat(String channelUserId, Channel channel, String establishmentId, String message) {
+        // Memory key is stable across sessions: same user on same establishment = same conversation history
+        String memoryKey = channelUserId + "|" + establishmentId;
+
         LocalDate today = LocalDate.now();
         String currentDate = today.format(DATE_FORMATTER);
         String currentDayOfWeek = today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH);
 
-        LOGGER.debug("Agent input: sessionId={}, establishmentId={}, date={} ({}), message={}",
-                sessionId, establishmentId, currentDate, currentDayOfWeek, message);
+        LOGGER.debug("Agent input: channelUserId={}, channel={}, establishmentId={}, date={} ({}), message={}",
+                channelUserId, channel, establishmentId, currentDate, currentDayOfWeek, message);
 
-        String reply = agentLlm.chat(sessionId, establishmentId, sessionId, currentDate, currentDayOfWeek, message);
+        String reply = agentLlm.chat(memoryKey, establishmentId, channel.name(), channelUserId, currentDate, currentDayOfWeek, message);
 
-        LOGGER.debug("Agent output: sessionId={}, reply={}", sessionId, singleLine(reply, 240));
+        LOGGER.debug("Agent output: channelUserId={}, reply={}", channelUserId, singleLine(reply, 240));
         return reply;
     }
 

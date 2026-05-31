@@ -10,12 +10,13 @@ public interface ReservationRepositoryPort {
 
     ReservationResult createReservation(CreateReservationRequest request);
 
-    Optional<ReservationSummary> findReservation(String referenceNumber);
+    Optional<ReservationSummary> findReservation(String referenceNumber, String channelUserId);
 
-    ReservationResult cancelReservation(String referenceNumber);
+    ReservationResult cancelReservation(String referenceNumber, String channelUserId);
 
     @NullMarked
     record CreateReservationRequest(
+            String channelUserId,
             String reservationName,
             LocalDate date,
             LocalTime time,
