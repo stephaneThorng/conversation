@@ -5,6 +5,7 @@ import dev.stephyu.conversation.domain.Channel;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
+import java.time.ZoneId;
 import java.util.Locale;
 import java.util.Objects;
 import org.jspecify.annotations.NullMarked;
@@ -28,7 +29,7 @@ public final class ConversationAgentAdapter implements ConversationAgentPort {
         // Memory key is stable across sessions: same user on same establishment = same conversation history
         String memoryKey = channelUserId + "|" + establishmentId;
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
         String currentDate = today.format(DATE_FORMATTER);
         String currentDayOfWeek = today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH);
 

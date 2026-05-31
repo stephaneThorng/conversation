@@ -2,6 +2,7 @@ package dev.stephyu.conversation.application.port.outbound;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.NullMarked;
 
@@ -10,12 +11,15 @@ public interface ReservationRepositoryPort {
 
     ReservationResult createReservation(CreateReservationRequest request);
 
-    Optional<ReservationSummary> findReservation(String referenceNumber, String channelUserId);
+    ReservationCapacityResult checkReservationCapacity(ReservationCapacityRequest request);
 
-    ReservationResult cancelReservation(String referenceNumber, String channelUserId);
+    Optional<ReservationSummary> findReservation(String establishmentId, String referenceNumber, String channelUserId);
+
+    ReservationResult cancelReservation(String establishmentId, String referenceNumber, String channelUserId);
 
     @NullMarked
     record CreateReservationRequest(
+            String establishmentId,
             String channelUserId,
             String reservationName,
             LocalDate date,
@@ -41,6 +45,29 @@ public interface ReservationRepositoryPort {
             LocalDate date,
             LocalTime time,
             int peopleCount
+    ) {
+    }
+
+    @NullMarked
+    record ReservationCapacityRequest(
+            String establishmentId,
+            LocalDate date,
+            LocalTime time,
+            int peopleCount
+    ) {
+    }
+
+    @NullMarked
+    record ReservationCapacityResult(
+            boolean canReserve,
+            String reason,
+            int requestedPeopleCount,
+            int reservationDurationMinutes,
+            int availableSeats,
+            int requiredTables,
+            boolean canMergeTables,
+            List<String> selectedTableNumbers,
+            List<String> suggestedAlternatives
     ) {
     }
 }

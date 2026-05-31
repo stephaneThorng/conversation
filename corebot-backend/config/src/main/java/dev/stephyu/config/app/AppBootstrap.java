@@ -22,7 +22,7 @@ public final class AppBootstrap {
         DSLContext dslContext = databaseBootstrap.createDslContext(dataSource);
         SearchMenuRepositoryPort searchMenuRepositoryPort = new PostgresMenuSearchRepository(dslContext);
 
-        List<HttpEndpoint> controllers = new ConversationModule().httpEndpoints(searchMenuRepositoryPort);
+        List<HttpEndpoint> controllers = new ConversationModule().httpEndpoints(searchMenuRepositoryPort, dslContext);
 
         Javalin app = new JavalinFactory().createApp(controllers);
         return new ApplicationRuntime(appConfig, app);

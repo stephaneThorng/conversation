@@ -15,13 +15,14 @@ import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.AfterAll;
 import org.postgresql.ds.PGSimpleDataSource;
+import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 @NullMarked
-@Testcontainers
 abstract class PostgresMenuSearchRepositoryTestSupport {
 
     protected static final UUID ESTABLISHMENT_ID = UUID.fromString("6f7d2c8e-2f55-4e75-8c9a-2f31fdd9b001");
@@ -39,11 +40,25 @@ abstract class PostgresMenuSearchRepositoryTestSupport {
     protected static final UUID SPRITZ_ITEM_ID = UUID.fromString("4f8aa1fd-d1a0-4ef1-a3c7-dccdb1093004");
     protected static final UUID OTHER_PAPAYA_ITEM_ID = UUID.fromString("4f8aa1fd-d1a0-4ef1-a3c7-dccdb1093005");
 
-    @Container
     protected static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
 
     protected DSLContext dsl;
     protected SearchMenuRepositoryPort repository;
+
+    @BeforeAll
+    static void startContainer() {
+        Assumptions.assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker is not available");
+        if (!POSTGRES.isRunning()) {
+            POSTGRES.start();
+        }
+    }
+
+    @AfterAll
+    static void stopContainer() {
+        if (POSTGRES.isRunning()) {
+            POSTGRES.stop();
+        }
+    }
 
     @BeforeEach
     void setUpDatabase() {
