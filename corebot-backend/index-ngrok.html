@@ -168,15 +168,25 @@
       <section id="thread" class="thread" aria-live="polite"></section>
 
       <form id="chat-form">
-        <input
-          id="message"
-          name="message"
-          type="text"
-          autocomplete="off"
-          placeholder="Ecrire un message..."
-          required
-        />
-        <button id="send-button" type="submit">Envoyer</button>
+        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px;">
+          <input
+            id="phone"
+            name="phone"
+            type="tel"
+            autocomplete="tel"
+            placeholder="Numéro de téléphone"
+            value="+33681888370"
+          />
+          <input
+            id="message"
+            name="message"
+            type="text"
+            autocomplete="off"
+            placeholder="Ecrire un message..."
+            required
+          />
+          <button id="send-button" type="submit">Envoyer</button>
+        </div>
       </form>
     </main>
 
@@ -185,15 +195,7 @@
       const ESTABLISHMENT_ID = "7a1e3d5c-9b2f-4e8a-bc10-3f42aee7c201";
       const CHANNEL = "WEB";
       // For demo purposes, generate a stable pseudo-user ID per browser (stored in localStorage)
-      const CHANNEL_USER_ID = (() => {
-        const key = "corebot_channel_user_id";
-        let id = localStorage.getItem(key);
-        if (!id) {
-          id = "web_" + Math.random().toString(36).slice(2, 11);
-          localStorage.setItem(key, id);
-        }
-        return id;
-      })();
+      const DEFAULT_PHONE = "+33681888370";
       const pageIsServedOverHttp =
         window.location.protocol === "http:" || window.location.protocol === "https:";
       const pageIsServedByBackend = pageIsServedOverHttp && window.location.port === "3000";
@@ -203,6 +205,7 @@
 
       const form = document.querySelector("#chat-form");
       const input = document.querySelector("#message");
+      const phoneInput = document.querySelector("#phone");
       const thread = document.querySelector("#thread");
       const sendButton = document.querySelector("#send-button");
       const sessionLabel = document.querySelector("#session");
@@ -254,7 +257,7 @@
             },
             body: JSON.stringify({
               establishmentId: ESTABLISHMENT_ID,
-              channelUserId: CHANNEL_USER_ID,
+              channelUserId: phoneInput.value.trim() || DEFAULT_PHONE,
               channel: CHANNEL,
               message,
               sessionId: sessionId,

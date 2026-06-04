@@ -10,7 +10,7 @@ public final class Application {
     private Application() {
     }
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
         AppConfig appConfig = AppConfig.fromEnvironment();
         ApplicationRuntime runtime = new AppBootstrap().bootstrap(appConfig);
         Runtime.getRuntime().addShutdownHook(new Thread(runtime::stop));
